@@ -5,17 +5,24 @@
     "type": "grant",
     "provider": "Демо-организация",
     "level": "regional",
-    "summary": "Тестовая запись для проверки подбора. Замените реальной мерой из официального источника.",
+    "summary": "Демонстрационная мера для начинающих предпринимателей, которым требуется финансирование для запуска бизнеса.",
     "amount_text": "до 500 000 ₽ (демо)",
-    "conditions": ["Условие 1 (демо)", "Условие 2 (демо)"],
-    "documents": ["Паспорт", "Бизнес-план (демо)"],
+    "conditions": [
+      "Бизнес находится на стадии запуска или работает менее года (демо)",
+      "Необходимо предоставить бизнес-план (демо)"
+    ],
+    "documents": [
+      "Паспорт",
+      "Бизнес-план (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
     "apply_url": null,
     "source_url": null,
     "verified_at": null,
     "deadline_at": null,
     "is_rolling": true,
     "is_demo": true,
-    "regions": ["16"],
+    "regions": ["16", "77"],
     "forms": ["ip", "self_employed"],
     "stages": ["idea", "lt1"],
     "industries": [],
@@ -28,10 +35,16 @@
     "type": "loan",
     "provider": "Демо-организация",
     "level": "federal",
-    "summary": "Тестовая запись без региональных ограничений. Замените реальной мерой.",
-    "amount_text": "демо",
-    "conditions": ["Условие 1 (демо)"],
-    "documents": ["Выписка из ЕГРИП/ЕГРЮЛ (демо)"],
+    "summary": "Демонстрационная программа финансирования приобретения оборудования для развития малого бизнеса.",
+    "amount_text": "до 5 000 000 ₽ (демо)",
+    "conditions": [
+      "Бизнес зарегистрирован и ведёт деятельность (демо)",
+      "Средства используются для приобретения оборудования (демо)"
+    ],
+    "documents": [
+      "Выписка из ЕГРИП/ЕГРЮЛ (демо)",
+      "Коммерческое предложение на оборудование (демо)"
+    ],
     "apply_url": null,
     "source_url": null,
     "verified_at": null,
@@ -41,8 +54,8 @@
     "regions": [],
     "forms": ["ip", "ooo"],
     "stages": ["lt1", "y1_3", "gt3"],
-    "industries": [],
-    "employees": [],
+    "industries": ["production", "food", "construction"],
+    "employees": ["e1_15", "e16_100"],
     "needs": ["equipment", "money_growth"]
   },
   {
@@ -51,9 +64,11 @@
     "type": "consultation",
     "provider": "Демо-организация",
     "level": "federal",
-    "summary": "Тестовая запись: подходит всем, ищущим консультации и обучение.",
+    "summary": "Демонстрационная консультационная программа для предпринимателей, которым нужны обучение и консультации.",
     "amount_text": null,
-    "conditions": ["Без ограничений (демо)"],
+    "conditions": [
+      "Без ограничений по региону (демо)"
+    ],
     "documents": [],
     "apply_url": null,
     "source_url": null,
@@ -67,5 +82,298 @@
     "industries": [],
     "employees": [],
     "needs": ["education"]
+  },
+  {
+    "slug": "demo-microloan-growth",
+    "title": "[ДЕМО] Льготное микрофинансирование для развития",
+    "type": "loan",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная мера финансовой поддержки действующего малого бизнеса для пополнения оборотных средств и развития.",
+    "amount_text": "до 3 000 000 ₽ (демо)",
+    "conditions": [
+      "Бизнес работает более одного года (демо)",
+      "Финансирование направляется на развитие бизнеса (демо)"
+    ],
+    "documents": [
+      "Выписка из ЕГРИП/ЕГРЮЛ (демо)",
+      "Финансовые документы (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": ["16", "66", "77"],
+    "forms": ["ip", "ooo"],
+    "stages": ["y1_3", "gt3"],
+    "industries": [],
+    "employees": ["none", "e1_15", "e16_100"],
+    "needs": ["money_growth"]
+  },
+  {
+    "slug": "demo-equipment-moscow",
+    "title": "[ДЕМО] Субсидия на приобретение оборудования",
+    "type": "subsidy",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная субсидия для малого бизнеса на приобретение оборудования, необходимого для деятельности.",
+    "amount_text": "до 1 000 000 ₽ (демо)",
+    "conditions": [
+      "Малое предприятие зарегистрировано в регионе (демо)",
+      "Оборудование используется в деятельности организации (демо)"
+    ],
+    "documents": [
+      "Заявление (демо)",
+      "Документы на оборудование (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": false,
+    "is_demo": true,
+    "regions": ["77"],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3", "gt3"],
+    "industries": ["production", "food", "services"],
+    "employees": ["e1_15", "e16_100"],
+    "needs": ["equipment"]
+  },
+  {
+    "slug": "demo-export-support",
+    "title": "[ДЕМО] Консультационная поддержка для выхода на экспорт",
+    "type": "consultation",
+    "provider": "Демо-организация",
+    "level": "federal",
+    "summary": "Демонстрационная программа консультационной поддержки компаний, планирующих выход на зарубежные рынки.",
+    "amount_text": null,
+    "conditions": [
+      "Компания планирует или осуществляет экспортную деятельность (демо)",
+      "Необходимо пройти консультацию специалиста (демо)"
+    ],
+    "documents": [
+      "Карточка организации (демо)",
+      "Описание экспортного проекта (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": [],
+    "forms": ["ip", "ooo"],
+    "stages": ["y1_3", "gt3"],
+    "industries": ["production", "trade", "it", "food", "agro"],
+    "employees": ["e1_15", "e16_100"],
+    "needs": ["export"]
+  },
+  {
+    "slug": "demo-young-business",
+    "title": "[ДЕМО] Поддержка молодых предпринимателей",
+    "type": "grant",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная финансовая поддержка предпринимателей на ранних этапах развития бизнеса.",
+    "amount_text": "до 300 000 ₽ (демо)",
+    "conditions": [
+      "Бизнес существует не более трёх лет (демо)",
+      "Требуется описание проекта и целей финансирования (демо)"
+    ],
+    "documents": [
+      "Паспорт",
+      "Бизнес-план (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": false,
+    "is_demo": true,
+    "regions": ["16", "66", "77"],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3"],
+    "industries": [],
+    "employees": ["none", "e1_15"],
+    "needs": ["money_growth"]
+  },
+  {
+    "slug": "demo-production-loan",
+    "title": "[ДЕМО] Льготный займ на развитие производства",
+    "type": "loan",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная программа льготного финансирования предприятий, которые развивают производственные мощности.",
+    "amount_text": "до 10 000 000 ₽ (демо)",
+    "conditions": [
+      "Основное направление деятельности — производство (демо)",
+      "Средства используются для развития производственных мощностей (демо)"
+    ],
+    "documents": [
+      "Выписка из ЕГРЮЛ/ЕГРИП (демо)",
+      "Бизнес-план (демо)",
+      "Расчёт расходов (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": ["66"],
+    "forms": ["ip", "ooo"],
+    "stages": ["y1_3", "gt3"],
+    "industries": ["production"],
+    "employees": ["e1_15", "e16_100"],
+    "needs": ["equipment", "money_growth"]
+  },
+  {
+    "slug": "demo-social-business",
+    "title": "[ДЕМО] Грант для социального предпринимательства",
+    "type": "grant",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная мера финансовой поддержки проектов, имеющих социальную направленность.",
+    "amount_text": "до 500 000 ₽ (демо)",
+    "conditions": [
+      "Проект должен соответствовать критериям социальной направленности (демо)",
+      "Необходимо предоставить описание проекта (демо)"
+    ],
+    "documents": [
+      "Заявление (демо)",
+      "Описание проекта (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": false,
+    "is_demo": true,
+    "regions": ["16", "77"],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3", "gt3"],
+    "industries": ["services", "food"],
+    "employees": ["none", "e1_15"],
+    "needs": ["money_growth"]
+  },
+  {
+    "slug": "demo-agriculture-equipment",
+    "title": "[ДЕМО] Поддержка сельскохозяйственных производителей",
+    "type": "subsidy",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная мера поддержки предпринимателей в сфере сельского хозяйства при приобретении оборудования.",
+    "amount_text": "до 2 000 000 ₽ (демо)",
+    "conditions": [
+      "Основное направление деятельности — сельское хозяйство (демо)",
+      "Оборудование должно использоваться в хозяйственной деятельности (демо)"
+    ],
+    "documents": [
+      "Заявление (демо)",
+      "Документы на оборудование (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": false,
+    "is_demo": true,
+    "regions": ["16"],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3", "gt3"],
+    "industries": ["agro"],
+    "employees": ["none", "e1_15", "e16_100"],
+    "needs": ["equipment", "money_growth"]
+  },
+  {
+    "slug": "demo-it-development",
+    "title": "[ДЕМО] Поддержка IT-проектов",
+    "type": "grant",
+    "provider": "Демо-организация",
+    "level": "federal",
+    "summary": "Демонстрационная мера поддержки небольших IT-компаний, направленная на развитие цифрового продукта.",
+    "amount_text": "до 2 000 000 ₽ (демо)",
+    "conditions": [
+      "Основная деятельность связана с IT (демо)",
+      "Необходимо описание цифрового продукта и целей проекта (демо)"
+    ],
+    "documents": [
+      "Описание IT-проекта (демо)",
+      "Документы о регистрации бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": [],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3", "gt3"],
+    "industries": ["it"],
+    "employees": ["none", "e1_15", "e16_100"],
+    "needs": ["money_growth", "equipment"]
+  },
+  {
+    "slug": "demo-business-training",
+    "title": "[ДЕМО] Обучение для предпринимателей",
+    "type": "consultation",
+    "provider": "Демо-организация",
+    "level": "federal",
+    "summary": "Демонстрационная программа обучения основам ведения и развития малого бизнеса.",
+    "amount_text": null,
+    "conditions": [
+      "Программа доступна предпринимателям и начинающим владельцам бизнеса (демо)"
+    ],
+    "documents": [
+      "Регистрационные данные бизнеса (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": [],
+    "forms": [],
+    "stages": ["idea", "lt1", "y1_3"],
+    "industries": [],
+    "employees": [],
+    "needs": ["education"]
+  },
+  {
+    "slug": "demo-tax-support",
+    "title": "[ДЕМО] Налоговая поддержка для малого бизнеса",
+    "type": "tax_benefit",
+    "provider": "Демо-организация",
+    "level": "regional",
+    "summary": "Демонстрационная мера поддержки, связанная с применением доступных налоговых льгот для малого бизнеса.",
+    "amount_text": null,
+    "conditions": [
+      "Необходимо соответствовать установленным критериям программы (демо)",
+      "Льгота зависит от региона и вида деятельности (демо)"
+    ],
+    "documents": [
+      "Документы о регистрации бизнеса (демо)",
+      "Налоговые документы (демо)"
+    ],
+    "apply_url": null,
+    "source_url": null,
+    "verified_at": null,
+    "deadline_at": null,
+    "is_rolling": true,
+    "is_demo": true,
+    "regions": ["16", "66", "77"],
+    "forms": ["ip", "ooo"],
+    "stages": ["lt1", "y1_3", "gt3"],
+    "industries": [],
+    "employees": [],
+    "needs": ["tax"]
   }
 ]
