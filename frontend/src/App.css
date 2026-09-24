@@ -804,3 +804,266 @@ p {
     max-width: none;
   }
 }
+
+/* ==========================================
+   START / WELCOME SCREEN
+   ========================================== */
+
+.welcome-page {
+  min-height: calc(100vh - 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+
+.welcome-card {
+  width: 100%;
+  max-width: 920px;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 28px;
+  padding: 64px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+}
+
+.welcome-content {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.welcome-card h1 {
+  margin: 12px 0 20px;
+  font-size: clamp(36px, 5vw, 58px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.welcome-description {
+  max-width: 680px;
+  margin: 0 0 38px;
+  font-size: 18px;
+  line-height: 1.65;
+  color: #666666;
+}
+
+.welcome-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 38px;
+}
+
+.welcome-feature {
+  min-height: 126px;
+  padding: 20px;
+  border: 1px solid #eeeeee;
+  border-radius: 18px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.welcome-feature-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.welcome-feature div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.welcome-feature strong {
+  font-size: 14px;
+  color: #171717;
+}
+
+.welcome-feature span:not(.welcome-feature-icon) {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #777777;
+}
+
+.welcome-button {
+  min-width: 210px;
+  justify-content: center;
+}
+
+.welcome-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 15px;
+  color: #888888;
+  font-size: 13px;
+}
+
+.topbar-back {
+  border: 0;
+  background: transparent;
+  color: #666666;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.topbar-back:hover {
+  color: #111111;
+}
+
+
+/* ==========================================
+   MOBILE
+   ========================================== */
+
+@media (max-width: 700px) {
+  .welcome-page {
+    min-height: auto;
+    padding-top: 24px;
+    padding-bottom: 32px;
+  }
+
+  .welcome-card {
+    border-radius: 22px;
+    padding: 32px 22px;
+  }
+
+  .welcome-card h1 {
+    font-size: 36px;
+    line-height: 1.08;
+  }
+
+  .welcome-description {
+    font-size: 16px;
+    line-height: 1.55;
+    margin-bottom: 28px;
+  }
+
+  .welcome-features {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .welcome-feature {
+    min-height: auto;
+    flex-direction: row;
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .welcome-button {
+    width: 100%;
+  }
+
+  .welcome-meta {
+    justify-content: center;
+  }
+
+  .topbar-back {
+    font-size: 13px;
+  }
+}
+
+/* ==========================================
+   FULL MEASURE CARD
+   ========================================== */
+
+.demo-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 20px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #f2f2f2;
+  color: #666666;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #eeeeee;
+  border-radius: 12px;
+  background: #fafafa;
+  color: #444444;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.list-marker {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: #222222;
+}
+
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 34px;
+  padding-top: 28px;
+  border-top: 1px solid #eeeeee;
+}
+
+.detail-actions .primary-button,
+.detail-actions .secondary-button {
+  min-height: 48px;
+}
+
+.detail-actions .primary-button {
+  flex: 1 1 240px;
+}
+
+.detail-actions .secondary-button {
+  flex: 0 1 auto;
+}
+
+.detail-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+
+/* ==========================================
+   MOBILE MEASURE CARD
+   ========================================== */
+
+@media (max-width: 700px) {
+  .detail-actions {
+    flex-direction: column;
+  }
+
+  .detail-actions .primary-button,
+  .detail-actions .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .detail-list-item {
+    padding: 13px 14px;
+  }
+}

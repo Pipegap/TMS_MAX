@@ -1,6 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
+type MaxWebApp = {
+  initData: string
+  initDataUnsafe?: {
+    user?: {
+      id: number
+      first_name: string
+      last_name?: string
+      username?: string
+    }
+  }
+  platform?: string
+  version?: string
+  openLink?: (url: string) => void
+}
+
+declare global {
+  interface Window {
+    WebApp?: MaxWebApp
+  }
+}
+
 type Dictionary = {
   regions: { id: string; label: string }[]
   businessForms: { id: string; label: string }[]
@@ -26,15 +47,36 @@ type Measure = {
   provider: string
   level: string
   summary: string
+
   amountText?: string | null
   deadlineAt?: string | null
   isRolling?: boolean
   isDemo?: boolean
+
+  conditions?: string[]
+  documents?: string[]
+  applyUrl?: string | null
+  sourceUrl?: string | null
+
   score?: number
   reasons?: string[]
 }
 
 const DEV_USER_ID = '123456789'
+
+function getAuthHeaders(): Record<string, string> {
+  const initData = window.WebApp?.initData
+
+  if (initData) {
+    return {
+      Authorization: `MaxWebApp ${initData}`,
+    }
+  }
+
+  return {
+    'x-dev-user-id': DEV_USER_ID,
+  }
+}
 
 const emptyProfile: Profile = {
   regionId: '',
@@ -49,7 +91,9 @@ function App() {
   const [dictionaries, setDictionaries] = useState<Dictionary | null>(null)
   const [profile, setProfile] = useState<Profile>(emptyProfile)
 
+  const [started, setStarted] = useState(false)
   const [step, setStep] = useState(0)
+
   const [results, setResults] = useState<Measure[]>([])
   const [selectedMeasure, setSelectedMeasure] = useState<Measure | null>(null)
 
@@ -63,7 +107,8 @@ function App() {
       {
         key: 'regionId' as const,
         title: 'Где зарегистрирован ваш бизнес?',
-        description: 'Регион регистрации влияет на доступные меры поддержки.',
+        description:
+          'Регион регистрации влияет на доступные меры поддержки.',
         options: dictionaries?.regions ?? [],
       },
       {
@@ -75,7 +120,8 @@ function App() {
       {
         key: 'stage' as const,
         title: 'На каком этапе находится бизнес?',
-        description: 'Это поможет подобрать программы для вашей текущей ситуации.',
+        description:
+          'Это поможет подобрать программы для вашей текущей ситуации.',
         options: dictionaries?.stages ?? [],
       },
       {
@@ -87,13 +133,15 @@ function App() {
       {
         key: 'employees' as const,
         title: 'Сколько сотрудников работает в бизнесе?',
-        description: 'Количество сотрудников используется для отбора подходящих программ.',
+        description:
+          'Количество сотрудников используется для отбора подходящих программ.',
         options: dictionaries?.employees ?? [],
       },
       {
         key: 'needs' as const,
         title: 'Какая поддержка вам сейчас нужна?',
-        description: 'Можно выбрать основную задачу, которую вы хотите решить.',
+        description:
+          'Можно выбрать одну или несколько задач, которые вы хотите решить.',
         options: dictionaries?.needs ?? [],
       },
     ],
@@ -133,6 +181,12 @@ function App() {
     }))
   }
 
+  const startMatching = () => {
+    setStarted(true)
+    setStep(0)
+    setError('')
+  }
+
   const nextStep = () => {
     if (!canContinue) return
 
@@ -159,7 +213,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-dev-user-id': DEV_USER_ID,
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(profile),
       })
@@ -186,9 +240,7 @@ function App() {
 
     try {
       const response = await fetch(`/api/measures/${measure.id}`, {
-        headers: {
-          'x-dev-user-id': DEV_USER_ID,
-        },
+        headers: getAuthHeaders(),
       })
 
       if (!response.ok) {
@@ -208,11 +260,73 @@ function App() {
     }
   }
 
+  const openApplyLink = () => {
+    if (!selectedMeasure?.applyUrl) {
+      setError('Ссылка на оформление для этой меры пока не указана.')
+      return
+    }
+
+    const webApp = (
+      window as Window & {
+        WebApp?: {
+          openLink?: (url: string) => void
+        }
+      }
+    ).WebApp
+
+    if (webApp?.openLink) {
+      webApp.openLink(selectedMeasure.applyUrl)
+      return
+    }
+
+    window.open(
+      selectedMeasure.applyUrl,
+      '_blank',
+      'noopener,noreferrer',
+    )
+  }
+
+  const openSourceLink = () => {
+    if (!selectedMeasure?.sourceUrl) {
+      setError('Источник для этой меры пока не указан.')
+      return
+    }
+
+    const webApp = (
+      window as Window & {
+        WebApp?: {
+          openLink?: (url: string) => void
+        }
+      }
+    ).WebApp
+
+    if (webApp?.openLink) {
+      webApp.openLink(selectedMeasure.sourceUrl)
+      return
+    }
+
+    window.open(
+      selectedMeasure.sourceUrl,
+      '_blank',
+      'noopener,noreferrer',
+    )
+  }
+
   const restart = () => {
     setProfile(emptyProfile)
     setResults([])
     setSelectedMeasure(null)
     setStep(0)
+    setStarted(true)
+    setError('')
+  }
+
+  const goToStart = () => {
+    setSelectedMeasure(null)
+    setResults([])
+    setProfile(emptyProfile)
+    setStep(0)
+    setStarted(false)
     setError('')
   }
 
@@ -237,9 +351,15 @@ function App() {
         <main className="error-screen">
           <div className="error-card">
             <span className="eyebrow">Ошибка</span>
+
             <h1>Не удалось загрузить сервис</h1>
+
             <p>{error}</p>
-            <button className="primary-button" onClick={() => window.location.reload()}>
+
+            <button
+              className="primary-button"
+              onClick={() => window.location.reload()}
+            >
               Попробовать снова
             </button>
           </div>
@@ -247,6 +367,12 @@ function App() {
       </div>
     )
   }
+
+  /*
+   * ==========================================
+   * КАРТОЧКА МЕРЫ
+   * ==========================================
+   */
 
   if (selectedMeasure) {
     return (
@@ -259,7 +385,10 @@ function App() {
         </header>
 
         <main className="page detail-page">
-          <button className="back-link" onClick={() => setSelectedMeasure(null)}>
+          <button
+            className="back-link"
+            onClick={() => setSelectedMeasure(null)}
+          >
             ← Назад к результатам
           </button>
 
@@ -267,7 +396,10 @@ function App() {
             <article className="detail-card">
               <div className="detail-header">
                 <div>
-                  <span className="eyebrow">{selectedMeasure.type}</span>
+                  <span className="eyebrow">
+                    {selectedMeasure.type}
+                  </span>
+
                   <h1>{selectedMeasure.title}</h1>
                 </div>
 
@@ -278,36 +410,87 @@ function App() {
                 )}
               </div>
 
+              {selectedMeasure.isDemo && (
+                <div className="demo-badge">
+                  Демонстрационная мера
+                </div>
+              )}
+
               <p className="detail-summary">
                 {selectedMeasure.summary}
               </p>
 
-              {selectedMeasure.reasons && selectedMeasure.reasons.length > 0 && (
-                <section className="detail-section">
-                  <h2>Почему подходит вам</h2>
+              {selectedMeasure.reasons &&
+                selectedMeasure.reasons.length > 0 && (
+                  <section className="detail-section">
+                    <h2>Почему подходит вам</h2>
 
-                  <div className="reason-list">
-                    {selectedMeasure.reasons.map((reason) => (
-                      <div className="reason" key={reason}>
-                        <span className="check">✓</span>
-                        <span>{reason}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+                    <div className="reason-list">
+                      {selectedMeasure.reasons.map((reason) => (
+                        <div className="reason" key={reason}>
+                          <span className="check">✓</span>
+                          <span>{reason}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+              {selectedMeasure.conditions &&
+                selectedMeasure.conditions.length > 0 && (
+                  <section className="detail-section">
+                    <h2>Основные условия</h2>
+
+                    <div className="detail-list">
+                      {selectedMeasure.conditions.map(
+                        (condition, index) => (
+                          <div
+                            className="detail-list-item"
+                            key={`${condition}-${index}`}
+                          >
+                            <span className="list-marker">✓</span>
+                            <span>{condition}</span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </section>
+                )}
+
+              {selectedMeasure.documents &&
+                selectedMeasure.documents.length > 0 && (
+                  <section className="detail-section">
+                    <h2>Необходимые документы</h2>
+
+                    <div className="detail-list">
+                      {selectedMeasure.documents.map(
+                        (document, index) => (
+                          <div
+                            className="detail-list-item"
+                            key={`${document}-${index}`}
+                          >
+                            <span className="list-marker">•</span>
+                            <span>{document}</span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </section>
+                )}
 
               <section className="detail-section">
-                <h2>Основные условия</h2>
+                <h2>Основная информация</h2>
 
                 <div className="info-grid">
                   <div className="info-item">
                     <span>Организация</span>
+
                     <strong>{selectedMeasure.provider}</strong>
                   </div>
 
                   <div className="info-item">
                     <span>Уровень поддержки</span>
+
                     <strong>
                       {selectedMeasure.level === 'federal'
                         ? 'Федеральный'
@@ -317,6 +500,7 @@ function App() {
 
                   <div className="info-item">
                     <span>Срок</span>
+
                     <strong>
                       {selectedMeasure.isRolling
                         ? 'Приём постоянно'
@@ -329,10 +513,27 @@ function App() {
               </section>
 
               <div className="detail-actions">
-                <button className="primary-button">
-                  Перейти к оформлению
-                  <span>↗</span>
+                <button
+                  className="primary-button"
+                  onClick={openApplyLink}
+                  disabled={!selectedMeasure.applyUrl}
+                >
+                  {selectedMeasure.applyUrl
+                    ? 'Перейти к оформлению'
+                    : 'Ссылка на оформление не указана'}
+
+                  {selectedMeasure.applyUrl && <span>↗</span>}
                 </button>
+
+                {selectedMeasure.sourceUrl && (
+                  <button
+                    className="secondary-button"
+                    onClick={openSourceLink}
+                  >
+                    Официальный источник
+                    <span>↗</span>
+                  </button>
+                )}
 
                 <button
                   className="secondary-button"
@@ -344,9 +545,23 @@ function App() {
             </article>
           </div>
         </main>
+
+        {error && (
+          <div className="toast">
+            {error}
+
+            <button onClick={() => setError('')}>×</button>
+          </div>
+        )}
       </div>
     )
   }
+
+  /*
+   * ==========================================
+   * РЕЗУЛЬТАТЫ
+   * ==========================================
+   */
 
   if (step === questions.length) {
     return (
@@ -362,6 +577,7 @@ function App() {
           <div className="results-heading">
             <div>
               <span className="eyebrow">Результат подбора</span>
+
               <h1>
                 {results.length > 0
                   ? 'Подходящие меры поддержки'
@@ -370,12 +586,19 @@ function App() {
 
               <p>
                 {results.length > 0
-                  ? `Для вашего бизнеса найдено ${results.length} ${results.length === 1 ? 'подходящее решение' : 'подходящих решений'}.`
+                  ? `Для вашего бизнеса найдено ${results.length} ${
+                      results.length === 1
+                        ? 'подходящее решение'
+                        : 'подходящих решений'
+                    }.`
                   : 'Попробуйте изменить параметры анкеты — это может расширить список доступных программ.'}
               </p>
             </div>
 
-            <button className="secondary-button" onClick={restart}>
+            <button
+              className="secondary-button"
+              onClick={restart}
+            >
               Изменить параметры
             </button>
           </div>
@@ -383,14 +606,19 @@ function App() {
           {results.length > 0 ? (
             <div className="results-list">
               {results.map((measure, index) => (
-                <article className="measure-card" key={measure.id}>
+                <article
+                  className="measure-card"
+                  key={measure.id}
+                >
                   <div className="measure-number">
                     {String(index + 1).padStart(2, '0')}
                   </div>
 
                   <div className="measure-content">
                     <div className="measure-top">
-                      <span className="measure-type">{measure.type}</span>
+                      <span className="measure-type">
+                        {measure.type}
+                      </span>
 
                       {measure.amountText && (
                         <span className="measure-amount">
@@ -403,19 +631,24 @@ function App() {
 
                     <p>{measure.summary}</p>
 
-                    {measure.reasons && measure.reasons.length > 0 && (
-                      <div className="compact-reasons">
-                        {measure.reasons.slice(0, 3).map((reason) => (
-                          <span key={reason}>
-                            ✓ {reason}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {measure.reasons &&
+                      measure.reasons.length > 0 && (
+                        <div className="compact-reasons">
+                          {measure.reasons
+                            .slice(0, 3)
+                            .map((reason) => (
+                              <span key={reason}>
+                                ✓ {reason}
+                              </span>
+                            ))}
+                        </div>
+                      )}
 
                     <button
                       className="measure-link"
-                      onClick={() => void openMeasure(measure)}
+                      onClick={() =>
+                        void openMeasure(measure)
+                      }
                     >
                       Подробнее
                       <span>→</span>
@@ -427,12 +660,18 @@ function App() {
           ) : (
             <div className="empty-state">
               <div className="empty-icon">⌕</div>
+
               <h2>Попробуем найти другие варианты</h2>
+
               <p>
-                Измените регион, цель или другие параметры бизнеса и повторите
-                подбор.
+                Измените регион, цель или другие параметры
+                бизнеса и повторите подбор.
               </p>
-              <button className="primary-button" onClick={restart}>
+
+              <button
+                className="primary-button"
+                onClick={restart}
+              >
                 Изменить параметры
               </button>
             </div>
@@ -448,6 +687,7 @@ function App() {
         {error && (
           <div className="toast">
             {error}
+
             <button onClick={() => setError('')}>×</button>
           </div>
         )}
@@ -455,32 +695,161 @@ function App() {
     )
   }
 
+  /*
+   * ==========================================
+   * СТАРТОВЫЙ ЭКРАН
+   * ==========================================
+   */
+
+  if (!started) {
+    return (
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="brand">
+            <div className="brand-mark">М</div>
+
+            <span>Меры поддержки</span>
+          </div>
+
+          <span className="topbar-caption">
+            Для предпринимателей
+          </span>
+        </header>
+
+        <main className="page welcome-page">
+          <section className="welcome-card">
+            <div className="welcome-content">
+              <span className="eyebrow">
+                Подбор поддержки
+              </span>
+
+              <h1>
+                Подберём меры поддержки
+                <br />
+                для вашего бизнеса
+              </h1>
+
+              <p className="welcome-description">
+                Не знаете, какая поддержка вам подходит?
+                Ответьте на несколько вопросов — сервис
+                подберёт программы с учётом региона, формы
+                бизнеса, отрасли и ваших целей.
+              </p>
+
+              <div className="welcome-features">
+                <div className="welcome-feature">
+                  <span className="welcome-feature-icon">
+                    01
+                  </span>
+
+                  <div>
+                    <strong>Ответьте на вопросы</strong>
+
+                    <span>
+                      Расскажите немного о своём бизнесе
+                    </span>
+                  </div>
+                </div>
+
+                <div className="welcome-feature">
+                  <span className="welcome-feature-icon">
+                    02
+                  </span>
+
+                  <div>
+                    <strong>Получите подборку</strong>
+
+                    <span>
+                      Мы найдём подходящие программы
+                    </span>
+                  </div>
+                </div>
+
+                <div className="welcome-feature">
+                  <span className="welcome-feature-icon">
+                    03
+                  </span>
+
+                  <div>
+                    <strong>Изучите условия</strong>
+
+                    <span>
+                      Посмотрите подробности каждой меры
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                className="primary-button welcome-button"
+                onClick={startMatching}
+              >
+                Начать подбор
+                <span>→</span>
+              </button>
+
+              <div className="welcome-meta">
+                <span>6 вопросов</span>
+                <span>•</span>
+                <span>около 1 минуты</span>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    )
+  }
+
+  /*
+   * ==========================================
+   * АНКЕТА
+   * ==========================================
+   */
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">М</div>
+
           <span>Меры поддержки</span>
         </div>
 
-        <span className="topbar-caption">Для предпринимателей</span>
+        <button
+          className="topbar-back"
+          onClick={goToStart}
+        >
+          На главную
+        </button>
       </header>
 
       <main className="page questionnaire-page">
         <div className="questionnaire-header">
           <div>
-            <span className="eyebrow">Подбор поддержки</span>
-            <h1>Найдём подходящие меры для вашего бизнеса</h1>
+            <span className="eyebrow">
+              Подбор поддержки
+            </span>
+
+            <h1>
+              Найдём подходящие меры
+              <br />
+              для вашего бизнеса
+            </h1>
+
             <p>
-              Ответьте на несколько вопросов. Мы подберём программы,
-              соответствующие параметрам вашего бизнеса.
+              Ответьте на несколько вопросов. Мы подберём
+              программы, соответствующие параметрам вашего
+              бизнеса.
             </p>
           </div>
         </div>
 
         <div className="progress-block">
           <div className="progress-info">
-            <span>Вопрос {step + 1} из {questions.length}</span>
+            <span>
+              Вопрос {step + 1} из {questions.length}
+            </span>
+
             <span>{progress}%</span>
           </div>
 
@@ -501,6 +870,7 @@ function App() {
 
               <div>
                 <h2>{currentQuestion.title}</h2>
+
                 <p>{currentQuestion.description}</p>
               </div>
             </div>
@@ -519,17 +889,31 @@ function App() {
                   <button
                     key={optionId}
                     type="button"
-                    className={`option ${selected ? 'selected' : ''}`}
+                    className={`option ${
+                      selected ? 'selected' : ''
+                    }`}
                     onClick={() => {
-                      if (currentQuestion.key === 'needs') {
+                      if (
+                        currentQuestion.key === 'needs'
+                      ) {
                         setProfile((current) => ({
                           ...current,
-                          needs: current.needs.includes(optionId)
-                            ? current.needs.filter((id) => id !== optionId)
-                            : [...current.needs, optionId],
+                          needs: current.needs.includes(
+                            optionId,
+                          )
+                            ? current.needs.filter(
+                                (id) => id !== optionId,
+                              )
+                            : [
+                                ...current.needs,
+                                optionId,
+                              ],
                         }))
                       } else {
-                        updateProfile(currentQuestion.key, optionId)
+                        updateProfile(
+                          currentQuestion.key,
+                          optionId,
+                        )
                       }
                     }}
                   >
@@ -564,6 +948,7 @@ function App() {
               : step === questions.length - 1
                 ? 'Подобрать меры'
                 : 'Продолжить'}
+
             {!matching && <span>→</span>}
           </button>
         </div>
@@ -572,6 +957,7 @@ function App() {
       {error && (
         <div className="toast">
           {error}
+
           <button onClick={() => setError('')}>×</button>
         </div>
       )}
