@@ -5,6 +5,7 @@ import { pool } from './db/pool.js';
 import { runMigrations } from './db/migrate.js';
 import { seedMeasures } from './db/seed.js';
 
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Если MAX недоступен на старте, бот не остаётся мёртвым: повторяем с растущей паузой (до 30 с). */

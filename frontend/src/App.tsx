@@ -31,10 +31,17 @@ type Dictionary = {
   needs: { id: string; label: string }[]
 }
 
+type OkvedItem = {
+  code: string
+  name: string
+}
+
 type Profile = {
   regionId: string
   businessForm: string
   stage: string
+  okvedCode: string
+  okvedName: string
   industry: string
   employees: string
   needs: string[]
@@ -51,7 +58,6 @@ type Measure = {
   amountText?: string | null
   deadlineAt?: string | null
   isRolling?: boolean
-  isDemo?: boolean
 
   conditions?: string[]
   documents?: string[]
@@ -60,6 +66,21 @@ type Measure = {
 
   score?: number
   reasons?: string[]
+}
+
+type QuestionKey =
+  | 'regionId'
+  | 'businessForm'
+  | 'stage'
+  | 'okved'
+  | 'employees'
+  | 'needs'
+
+type Question = {
+  key: QuestionKey
+  title: string
+  description: string
+  options: { id: string; label: string }[]
 }
 
 const DEV_USER_ID = '123456789'
@@ -78,68 +99,151 @@ function getAuthHeaders(): Record<string, string> {
   }
 }
 
+/**
+ * Приводит дату из backend к удобному виду:
+ * 2026-12-31 → 31 декабря 2026
+ */
+function formatDate(value?: string | null): string {
+  if (!value) {
+    return ''
+  }
+
+  const [year, month, day] = value.split('-')
+
+  if (!year || !month || !day) {
+    return value
+  }
+
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+  )
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
+/**
+ * Убираем техническую пометку [ДЕМО] из названия,
+ * если она осталась в данных seed.
+ */
+function cleanMeasureTitle(title: string): string {
+  return title
+    .replace(/^\s*\[ДЕМО\]\s*/i, '')
+    .trim()
+}
+
+function formatMeasureType(type: string): string {
+  const types: Record<string, string> = {
+    grant: 'Грант',
+    loan: 'Льготный заём',
+    microfinance: 'Микрофинансирование',
+    consultation: 'Консультация',
+    education: 'Обучение',
+    tax: 'Налоговая поддержка',
+    subsidy: 'Субсидия',
+    guarantee: 'Гарантийная поддержка',
+    export: 'Поддержка экспорта',
+    property: 'Имущественная поддержка',
+    information: 'Информационная поддержка',
+  }
+
+  return types[type] ?? type
+}
+
 const emptyProfile: Profile = {
   regionId: '',
   businessForm: '',
   stage: '',
+  okvedCode: '',
+  okvedName: '',
   industry: '',
   employees: '',
   needs: [],
 }
 
 function App() {
-  const [dictionaries, setDictionaries] = useState<Dictionary | null>(null)
-  const [profile, setProfile] = useState<Profile>(emptyProfile)
+  const [dictionaries, setDictionaries] =
+    useState<Dictionary | null>(null)
+
+  const [profile, setProfile] =
+    useState<Profile>(emptyProfile)
 
   const [started, setStarted] = useState(false)
   const [step, setStep] = useState(0)
 
   const [results, setResults] = useState<Measure[]>([])
-  const [selectedMeasure, setSelectedMeasure] = useState<Measure | null>(null)
+  const [selectedMeasure, setSelectedMeasure] =
+    useState<Measure | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const questions = useMemo(
+  // ==========================================
+  // ОКВЭД
+  // ==========================================
+
+  const [okvedQuery, setOkvedQuery] = useState('')
+  const [okvedResults, setOkvedResults] =
+    useState<OkvedItem[]>([])
+  const [okvedLoading, setOkvedLoading] = useState(false)
+
+  // ==========================================
+  // ВОПРОСЫ
+  // ==========================================
+
+  const questions = useMemo<Question[]>(
     () => [
       {
-        key: 'regionId' as const,
+        key: 'regionId',
         title: 'Где зарегистрирован ваш бизнес?',
         description:
           'Регион регистрации влияет на доступные меры поддержки.',
         options: dictionaries?.regions ?? [],
       },
       {
-        key: 'businessForm' as const,
+        key: 'businessForm',
         title: 'Как оформлен бизнес?',
-        description: 'Выберите организационно-правовую форму.',
+        description:
+          'Выберите организационно-правовую форму.',
         options: dictionaries?.businessForms ?? [],
       },
       {
-        key: 'stage' as const,
+        key: 'stage',
         title: 'На каком этапе находится бизнес?',
         description:
           'Это поможет подобрать программы для вашей текущей ситуации.',
         options: dictionaries?.stages ?? [],
       },
       {
-        key: 'industry' as const,
+        key: 'okved',
         title: 'Чем занимается ваш бизнес?',
-        description: 'Укажите основное направление деятельности.',
-        options: dictionaries?.industries ?? [],
+        description:
+          'Выберите основной вид деятельности по коду ОКВЭД.',
+        options: [],
       },
       {
-        key: 'employees' as const,
-        title: 'Сколько сотрудников работает в бизнесе?',
+        key: 'employees',
+        title:
+          'Сколько сотрудников работает в бизнесе?',
         description:
           'Количество сотрудников используется для отбора подходящих программ.',
         options: dictionaries?.employees ?? [],
       },
       {
-        key: 'needs' as const,
-        title: 'Какая поддержка вам сейчас нужна?',
+        key: 'needs',
+        title:
+          'Какая поддержка вам сейчас нужна?',
         description:
           'Можно выбрать одну или несколько задач, которые вы хотите решить.',
         options: dictionaries?.needs ?? [],
@@ -148,38 +252,127 @@ function App() {
     [dictionaries],
   )
 
+  // ==========================================
+  // ЗАГРУЗКА СПРАВОЧНИКОВ
+  // ==========================================
+
   useEffect(() => {
     fetch('/api/dictionaries')
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('Не удалось загрузить справочники')
+          throw new Error(
+            'Не удалось загрузить справочники',
+          )
         }
 
         return response.json()
       })
-      .then((data) => setDictionaries(data))
-      .catch(() => setError('Не удалось загрузить данные анкеты'))
-      .finally(() => setLoading(false))
+      .then((data) => {
+        setDictionaries(data)
+      })
+      .catch(() => {
+        setError('Не удалось загрузить данные анкеты')
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
+
+  // ==========================================
+  // ПОИСК ОКВЭД
+  // ==========================================
+
+  const searchOkved = async (query: string) => {
+    const value = query.trim()
+
+    if (!value) {
+      setOkvedResults([])
+      setOkvedLoading(false)
+      return
+    }
+
+    setOkvedLoading(true)
+
+    try {
+      const response = await fetch(
+        `/api/okved?query=${encodeURIComponent(value)}`,
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          'Не удалось загрузить ОКВЭД',
+        )
+      }
+
+      const data: { items: OkvedItem[] } =
+        await response.json()
+
+      setOkvedResults(data.items)
+    } catch (searchError) {
+      console.error(searchError)
+      setOkvedResults([])
+    } finally {
+      setOkvedLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (questions[step]?.key !== 'okved') {
+      setOkvedResults([])
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void searchOkved(okvedQuery)
+    }, 300)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [okvedQuery, step, questions])
+
+  // ==========================================
+  // ТЕКУЩИЙ ВОПРОС
+  // ==========================================
 
   const currentQuestion = questions[step]
 
-  const currentValue = currentQuestion
-    ? profile[currentQuestion.key]
-    : ''
+  const currentValue =
+    currentQuestion &&
+    currentQuestion.key !== 'okved' &&
+    currentQuestion.key !== 'needs'
+      ? profile[currentQuestion.key]
+      : ''
 
   const canContinue = currentQuestion
     ? currentQuestion.key === 'needs'
       ? profile.needs.length > 0
-      : Boolean(profile[currentQuestion.key])
+      : currentQuestion.key === 'okved'
+        ? Boolean(profile.okvedCode)
+        : Boolean(currentValue)
     : false
 
-  const updateProfile = (key: keyof Profile, value: string) => {
+  // ==========================================
+  // ИЗМЕНЕНИЕ ПРОФИЛЯ
+  // ==========================================
+
+  const updateProfile = (
+    key:
+      | 'regionId'
+      | 'businessForm'
+      | 'stage'
+      | 'employees',
+    value: string,
+  ) => {
     setProfile((current) => ({
       ...current,
       [key]: value,
     }))
   }
+
+  // ==========================================
+  // НАВИГАЦИЯ
+  // ==========================================
 
   const startMatching = () => {
     setStarted(true)
@@ -188,7 +381,9 @@ function App() {
   }
 
   const nextStep = () => {
-    if (!canContinue) return
+    if (!canContinue) {
+      return
+    }
 
     if (step < questions.length - 1) {
       setStep((current) => current + 1)
@@ -203,6 +398,10 @@ function App() {
       setStep((current) => current - 1)
     }
   }
+
+  // ==========================================
+  // ПОДБОР МЕР
+  // ==========================================
 
   const handleMatch = async () => {
     setMatching(true)
@@ -219,7 +418,9 @@ function App() {
       })
 
       if (!response.ok) {
-        throw new Error('Не удалось выполнить подбор')
+        throw new Error(
+          'Не удалось выполнить подбор',
+        )
       }
 
       const data = await response.json()
@@ -228,23 +429,36 @@ function App() {
       setSelectedMeasure(null)
       setStep(questions.length)
     } catch {
-      setError('Не удалось подобрать меры поддержки. Попробуйте ещё раз.')
+      setError(
+        'Не удалось подобрать меры поддержки. Попробуйте ещё раз.',
+      )
     } finally {
       setMatching(false)
     }
   }
 
-  const openMeasure = async (measure: Measure) => {
+  // ==========================================
+  // КАРТОЧКА МЕРЫ
+  // ==========================================
+
+  const openMeasure = async (
+    measure: Measure,
+  ) => {
     setDetailsLoading(true)
     setError('')
 
     try {
-      const response = await fetch(`/api/measures/${measure.id}`, {
-        headers: getAuthHeaders(),
-      })
+      const response = await fetch(
+        `/api/measures/${measure.id}`,
+        {
+          headers: getAuthHeaders(),
+        },
+      )
 
       if (!response.ok) {
-        throw new Error('Не удалось загрузить карточку')
+        throw new Error(
+          'Не удалось загрузить карточку',
+        )
       }
 
       const details = await response.json()
@@ -254,25 +468,27 @@ function App() {
         ...details,
       })
     } catch {
-      setError('Не удалось загрузить информацию о мере поддержки.')
+      setError(
+        'Не удалось загрузить информацию о мере поддержки.',
+      )
     } finally {
       setDetailsLoading(false)
     }
   }
 
+  // ==========================================
+  // ССЫЛКА НА ОФОРМЛЕНИЕ
+  // ==========================================
+
   const openApplyLink = () => {
     if (!selectedMeasure?.applyUrl) {
-      setError('Ссылка на оформление для этой меры пока не указана.')
+      setError(
+        'Ссылка на оформление для этой меры пока не указана.',
+      )
       return
     }
 
-    const webApp = (
-      window as Window & {
-        WebApp?: {
-          openLink?: (url: string) => void
-        }
-      }
-    ).WebApp
+    const webApp = window.WebApp
 
     if (webApp?.openLink) {
       webApp.openLink(selectedMeasure.applyUrl)
@@ -286,19 +502,19 @@ function App() {
     )
   }
 
+  // ==========================================
+  // ССЫЛКА НА ОФИЦИАЛЬНУЮ ИНФОРМАЦИЮ
+  // ==========================================
+
   const openSourceLink = () => {
     if (!selectedMeasure?.sourceUrl) {
-      setError('Источник для этой меры пока не указан.')
+      setError(
+        'Официальный источник для этой меры пока не указан.',
+      )
       return
     }
 
-    const webApp = (
-      window as Window & {
-        WebApp?: {
-          openLink?: (url: string) => void
-        }
-      }
-    ).WebApp
+    const webApp = window.WebApp
 
     if (webApp?.openLink) {
       webApp.openLink(selectedMeasure.sourceUrl)
@@ -312,12 +528,46 @@ function App() {
     )
   }
 
+  // ==========================================
+  // ОКВЭД
+  // ==========================================
+
+  const selectOkved = (item: OkvedItem) => {
+    setProfile((current) => ({
+      ...current,
+      okvedCode: item.code,
+      okvedName: item.name,
+    }))
+
+    setOkvedQuery('')
+    setOkvedResults([])
+  }
+
+  const clearOkved = () => {
+    setProfile((current) => ({
+      ...current,
+      okvedCode: '',
+      okvedName: '',
+    }))
+
+    setOkvedQuery('')
+    setOkvedResults([])
+  }
+
+  // ==========================================
+  // СБРОС
+  // ==========================================
+
   const restart = () => {
     setProfile(emptyProfile)
     setResults([])
     setSelectedMeasure(null)
     setStep(0)
     setStarted(true)
+
+    setOkvedQuery('')
+    setOkvedResults([])
+
     setError('')
   }
 
@@ -327,38 +577,67 @@ function App() {
     setProfile(emptyProfile)
     setStep(0)
     setStarted(false)
+
+    setOkvedQuery('')
+    setOkvedResults([])
+
     setError('')
   }
 
+  // ==========================================
+  // ПРОГРЕСС
+  // ==========================================
+
   const progress = Math.round(
-    ((Math.min(step, questions.length - 1) + 1) / questions.length) * 100,
+    ((Math.min(
+      step,
+      questions.length - 1,
+    ) +
+      1) /
+      questions.length) *
+      100,
   )
+
+  // ==========================================
+  // ЗАГРУЗКА
+  // ==========================================
 
   if (loading) {
     return (
       <div className="app-shell">
         <div className="loading-screen">
           <div className="loading-spinner" />
+
           <p>Загружаем сервис</p>
         </div>
       </div>
     )
   }
 
+  // ==========================================
+  // ОШИБКА ЗАГРУЗКИ
+  // ==========================================
+
   if (error && !dictionaries) {
     return (
       <div className="app-shell">
         <main className="error-screen">
           <div className="error-card">
-            <span className="eyebrow">Ошибка</span>
+            <span className="eyebrow">
+              Ошибка
+            </span>
 
-            <h1>Не удалось загрузить сервис</h1>
+            <h1>
+              Не удалось загрузить сервис
+            </h1>
 
             <p>{error}</p>
 
             <button
               className="primary-button"
-              onClick={() => window.location.reload()}
+              onClick={() =>
+                window.location.reload()
+              }
             >
               Попробовать снова
             </button>
@@ -368,18 +647,19 @@ function App() {
     )
   }
 
-  /*
-   * ==========================================
-   * КАРТОЧКА МЕРЫ
-   * ==========================================
-   */
+  // ==========================================
+  // ДЕТАЛЬНАЯ КАРТОЧКА МЕРЫ
+  // ==========================================
 
   if (selectedMeasure) {
     return (
       <div className="app-shell">
         <header className="topbar">
           <div className="brand">
-            <div className="brand-mark">М</div>
+            <div className="brand-mark">
+              М
+            </div>
+
             <span>Меры поддержки</span>
           </div>
         </header>
@@ -387,7 +667,9 @@ function App() {
         <main className="page detail-page">
           <button
             className="back-link"
-            onClick={() => setSelectedMeasure(null)}
+            onClick={() =>
+              setSelectedMeasure(null)
+            }
           >
             ← Назад к результатам
           </button>
@@ -400,7 +682,11 @@ function App() {
                     {selectedMeasure.type}
                   </span>
 
-                  <h1>{selectedMeasure.title}</h1>
+                  <h1>
+                    {cleanMeasureTitle(
+                      selectedMeasure.title,
+                    )}
+                  </h1>
                 </div>
 
                 {selectedMeasure.amountText && (
@@ -410,46 +696,60 @@ function App() {
                 )}
               </div>
 
-              {selectedMeasure.isDemo && (
-                <div className="demo-badge">
-                  Демонстрационная мера
-                </div>
-              )}
-
               <p className="detail-summary">
                 {selectedMeasure.summary}
               </p>
 
               {selectedMeasure.reasons &&
-                selectedMeasure.reasons.length > 0 && (
+                selectedMeasure.reasons.length >
+                  0 && (
                   <section className="detail-section">
-                    <h2>Почему подходит вам</h2>
+                    <h2>
+                      Почему подходит вам
+                    </h2>
 
                     <div className="reason-list">
-                      {selectedMeasure.reasons.map((reason) => (
-                        <div className="reason" key={reason}>
-                          <span className="check">✓</span>
-                          <span>{reason}</span>
-                        </div>
-                      ))}
+                      {selectedMeasure.reasons.map(
+                        (reason) => (
+                          <div
+                            className="reason"
+                            key={reason}
+                          >
+                            <span className="check">-</span>
+
+                            <span>{reason}</span>
+                          </div>
+                        ),
+                      )}
                     </div>
                   </section>
                 )}
 
               {selectedMeasure.conditions &&
-                selectedMeasure.conditions.length > 0 && (
+                selectedMeasure.conditions.length >
+                  0 && (
                   <section className="detail-section">
-                    <h2>Основные условия</h2>
+                    <h2>
+                      Основные условия
+                    </h2>
 
                     <div className="detail-list">
                       {selectedMeasure.conditions.map(
-                        (condition, index) => (
+                        (
+                          condition,
+                          index,
+                        ) => (
                           <div
                             className="detail-list-item"
                             key={`${condition}-${index}`}
                           >
-                            <span className="list-marker">✓</span>
-                            <span>{condition}</span>
+                            <span className="list-marker">
+                              -
+                            </span>
+
+                            <span>
+                              {condition}
+                            </span>
                           </div>
                         ),
                       )}
@@ -458,19 +758,30 @@ function App() {
                 )}
 
               {selectedMeasure.documents &&
-                selectedMeasure.documents.length > 0 && (
+                selectedMeasure.documents.length >
+                  0 && (
                   <section className="detail-section">
-                    <h2>Необходимые документы</h2>
+                    <h2>
+                      Необходимые документы
+                    </h2>
 
                     <div className="detail-list">
                       {selectedMeasure.documents.map(
-                        (document, index) => (
+                        (
+                          document,
+                          index,
+                        ) => (
                           <div
                             className="detail-list-item"
                             key={`${document}-${index}`}
                           >
-                            <span className="list-marker">•</span>
-                            <span>{document}</span>
+                            <span className="list-marker">
+                              -
+                            </span>
+
+                            <span>
+                              {document}
+                            </span>
                           </div>
                         ),
                       )}
@@ -479,33 +790,56 @@ function App() {
                 )}
 
               <section className="detail-section">
-                <h2>Основная информация</h2>
+                <h2>
+                  Основная информация
+                </h2>
 
                 <div className="info-grid">
                   <div className="info-item">
-                    <span>Организация</span>
+                    <span>
+                      Вид поддержки
+                    </span>
 
-                    <strong>{selectedMeasure.provider}</strong>
+                    <strong>{formatMeasureType(selectedMeasure.type)}</strong>
                   </div>
 
                   <div className="info-item">
-                    <span>Уровень поддержки</span>
+                    <span>
+                      Организация
+                    </span>
 
                     <strong>
-                      {selectedMeasure.level === 'federal'
+                      {
+                        selectedMeasure.provider
+                      }
+                    </strong>
+                  </div>
+
+                  <div className="info-item">
+                    <span>
+                      Уровень поддержки
+                    </span>
+
+                    <strong>
+                      {selectedMeasure.level ===
+                      'federal'
                         ? 'Федеральный'
                         : 'Региональный'}
                     </strong>
                   </div>
 
                   <div className="info-item">
-                    <span>Срок</span>
+                    <span>
+                      Срок
+                    </span>
 
                     <strong>
                       {selectedMeasure.isRolling
                         ? 'Приём постоянно'
                         : selectedMeasure.deadlineAt
-                          ? `До ${selectedMeasure.deadlineAt}`
+                          ? `До ${formatDate(
+                              selectedMeasure.deadlineAt,
+                            )}`
                           : 'Уточняется'}
                     </strong>
                   </div>
@@ -513,31 +847,38 @@ function App() {
               </section>
 
               <div className="detail-actions">
-                <button
-                  className="primary-button"
-                  onClick={openApplyLink}
-                  disabled={!selectedMeasure.applyUrl}
-                >
-                  {selectedMeasure.applyUrl
-                    ? 'Перейти к оформлению'
-                    : 'Ссылка на оформление не указана'}
-
-                  {selectedMeasure.applyUrl && <span>↗</span>}
-                </button>
+                {selectedMeasure.applyUrl ? (
+                  <button
+                    className="primary-button"
+                    onClick={openApplyLink}
+                  >
+                    Перейти к оформлению
+                    <span>↗</span>
+                  </button>
+                ) : (
+                  <button
+                    className="primary-button"
+                    disabled
+                  >
+                    Ссылка на оформление не указана
+                  </button>
+                )}
 
                 {selectedMeasure.sourceUrl && (
                   <button
                     className="secondary-button"
                     onClick={openSourceLink}
                   >
-                    Официальный источник
+                    Официальная информация
                     <span>↗</span>
                   </button>
                 )}
 
                 <button
                   className="secondary-button"
-                  onClick={() => setSelectedMeasure(null)}
+                  onClick={() =>
+                    setSelectedMeasure(null)
+                  }
                 >
                   Вернуться к мерам
                 </button>
@@ -550,25 +891,30 @@ function App() {
           <div className="toast">
             {error}
 
-            <button onClick={() => setError('')}>×</button>
+            <button
+              onClick={() => setError('')}
+            >
+              ×
+            </button>
           </div>
         )}
       </div>
     )
   }
 
-  /*
-   * ==========================================
-   * РЕЗУЛЬТАТЫ
-   * ==========================================
-   */
+  // ==========================================
+  // РЕЗУЛЬТАТЫ
+  // ==========================================
 
   if (step === questions.length) {
     return (
       <div className="app-shell">
         <header className="topbar">
           <div className="brand">
-            <div className="brand-mark">М</div>
+            <div className="brand-mark">
+              М
+            </div>
+
             <span>Меры поддержки</span>
           </div>
         </header>
@@ -576,7 +922,9 @@ function App() {
         <main className="page results-page">
           <div className="results-heading">
             <div>
-              <span className="eyebrow">Результат подбора</span>
+              <span className="eyebrow">
+                Результат подбора
+              </span>
 
               <h1>
                 {results.length > 0
@@ -586,7 +934,9 @@ function App() {
 
               <p>
                 {results.length > 0
-                  ? `Для вашего бизнеса найдено ${results.length} ${
+                  ? `Для вашего бизнеса найдено ${
+                      results.length
+                    } ${
                       results.length === 1
                         ? 'подходящее решение'
                         : 'подходящих решений'
@@ -605,67 +955,94 @@ function App() {
 
           {results.length > 0 ? (
             <div className="results-list">
-              {results.map((measure, index) => (
-                <article
-                  className="measure-card"
-                  key={measure.id}
-                >
-                  <div className="measure-number">
-                    {String(index + 1).padStart(2, '0')}
-                  </div>
-
-                  <div className="measure-content">
-                    <div className="measure-top">
-                      <span className="measure-type">
-                        {measure.type}
-                      </span>
-
-                      {measure.amountText && (
-                        <span className="measure-amount">
-                          {measure.amountText}
-                        </span>
-                      )}
+              {results.map(
+                (measure, index) => (
+                  <article
+                    className="measure-card"
+                    key={measure.id}
+                  >
+                    <div className="measure-number">
+                      {String(
+                        index + 1,
+                      ).padStart(2, '0')}
                     </div>
 
-                    <h2>{measure.title}</h2>
+                    <div className="measure-content">
+                      <div className="measure-top">
+                        <span className="measure-type">
+                          {measure.type}
+                        </span>
 
-                    <p>{measure.summary}</p>
+                        {measure.amountText && (
+                          <span className="measure-amount">
+                            {
+                              measure.amountText
+                            }
+                          </span>
+                        )}
+                      </div>
 
-                    {measure.reasons &&
-                      measure.reasons.length > 0 && (
-                        <div className="compact-reasons">
-                          {measure.reasons
-                            .slice(0, 3)
-                            .map((reason) => (
-                              <span key={reason}>
-                                ✓ {reason}
-                              </span>
-                            ))}
-                        </div>
-                      )}
+                      <h2>
+                        {cleanMeasureTitle(
+                          measure.title,
+                        )}
+                      </h2>
 
-                    <button
-                      className="measure-link"
-                      onClick={() =>
-                        void openMeasure(measure)
-                      }
-                    >
-                      Подробнее
-                      <span>→</span>
-                    </button>
-                  </div>
-                </article>
-              ))}
+                      <p>
+                        {measure.summary}
+                      </p>
+
+                      {measure.reasons &&
+                        measure.reasons
+                          .length > 0 && (
+                          <div className="compact-reasons">
+                            {measure.reasons
+                              .slice(0, 3)
+                              .map(
+                                (reason) => (
+                                  <span
+                                    key={
+                                      reason
+                                    }
+                                  >
+                                     {reason}
+                                  </span>
+                                ),
+                              )}
+                          </div>
+                        )}
+
+                      <button
+                        className="measure-link"
+                        onClick={() =>
+                          void openMeasure(
+                            measure,
+                          )
+                        }
+                      >
+                        Подробнее
+                        <span>→</span>
+                      </button>
+                    </div>
+                  </article>
+                ),
+              )}
             </div>
           ) : (
             <div className="empty-state">
-              <div className="empty-icon">⌕</div>
+              <div className="empty-icon">
+                ⌕
+              </div>
 
-              <h2>Попробуем найти другие варианты</h2>
+              <h2>
+                Попробуем найти другие
+                варианты
+              </h2>
 
               <p>
-                Измените регион, цель или другие параметры
-                бизнеса и повторите подбор.
+                Измените регион, цель или
+                другие параметры бизнеса и
+                повторите подбор.
               </p>
 
               <button
@@ -688,32 +1065,34 @@ function App() {
           <div className="toast">
             {error}
 
-            <button onClick={() => setError('')}>×</button>
+            <button
+              onClick={() => setError('')}
+            >
+              ×
+            </button>
           </div>
         )}
       </div>
     )
   }
 
-  /*
-   * ==========================================
-   * СТАРТОВЫЙ ЭКРАН
-   * ==========================================
-   */
+  // ==========================================
+  // СТАРТОВЫЙ ЭКРАН
+  // ==========================================
 
   if (!started) {
     return (
       <div className="app-shell">
         <header className="topbar">
           <div className="brand">
-            <div className="brand-mark">М</div>
+            <div className="brand-mark">
+              М
+            </div>
 
             <span>Меры поддержки</span>
           </div>
 
-          <span className="topbar-caption">
-            Для предпринимателей
-          </span>
+          
         </header>
 
         <main className="page welcome-page">
@@ -730,10 +1109,12 @@ function App() {
               </h1>
 
               <p className="welcome-description">
-                Не знаете, какая поддержка вам подходит?
-                Ответьте на несколько вопросов — сервис
-                подберёт программы с учётом региона, формы
-                бизнеса, отрасли и ваших целей.
+                Не знаете, какая поддержка
+                вам подходит? Ответьте на
+                несколько вопросов — сервис
+                подберёт программы с учётом
+                региона, формы бизнеса,
+                отрасли и ваших целей.
               </p>
 
               <div className="welcome-features">
@@ -743,10 +1124,13 @@ function App() {
                   </span>
 
                   <div>
-                    <strong>Ответьте на вопросы</strong>
+                    <strong>
+                      Ответьте на вопросы
+                    </strong>
 
                     <span>
-                      Расскажите немного о своём бизнесе
+                      Расскажите немного о
+                      своём бизнесе
                     </span>
                   </div>
                 </div>
@@ -757,10 +1141,13 @@ function App() {
                   </span>
 
                   <div>
-                    <strong>Получите подборку</strong>
+                    <strong>
+                      Получите подборку
+                    </strong>
 
                     <span>
-                      Мы найдём подходящие программы
+                      Мы найдём подходящие
+                      программы
                     </span>
                   </div>
                 </div>
@@ -771,10 +1158,13 @@ function App() {
                   </span>
 
                   <div>
-                    <strong>Изучите условия</strong>
+                    <strong>
+                      Изучите условия
+                    </strong>
 
                     <span>
-                      Посмотрите подробности каждой меры
+                      Посмотрите подробности
+                      каждой меры
                     </span>
                   </div>
                 </div>
@@ -785,13 +1175,18 @@ function App() {
                 onClick={startMatching}
               >
                 Начать подбор
+
                 <span>→</span>
               </button>
 
               <div className="welcome-meta">
                 <span>6 вопросов</span>
+
                 <span>•</span>
-                <span>около 1 минуты</span>
+
+                <span>
+                  около 1 минуты
+                </span>
               </div>
             </div>
           </section>
@@ -800,17 +1195,17 @@ function App() {
     )
   }
 
-  /*
-   * ==========================================
-   * АНКЕТА
-   * ==========================================
-   */
+  // ==========================================
+  // АНКЕТА
+  // ==========================================
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">М</div>
+          <div className="brand-mark">
+            М
+          </div>
 
           <span>Меры поддержки</span>
         </div>
@@ -837,9 +1232,10 @@ function App() {
             </h1>
 
             <p>
-              Ответьте на несколько вопросов. Мы подберём
-              программы, соответствующие параметрам вашего
-              бизнеса.
+              Ответьте на несколько вопросов.
+              Мы подберём программы,
+              соответствующие параметрам
+              вашего бизнеса.
             </p>
           </div>
         </div>
@@ -847,7 +1243,8 @@ function App() {
         <div className="progress-block">
           <div className="progress-info">
             <span>
-              Вопрос {step + 1} из {questions.length}
+              Вопрос {step + 1} из{' '}
+              {questions.length}
             </span>
 
             <span>{progress}%</span>
@@ -856,7 +1253,9 @@ function App() {
           <div className="progress-track">
             <div
               className="progress-value"
-              style={{ width: `${progress}%` }}
+              style={{
+                width: `${progress}%`,
+              }}
             />
           </div>
         </div>
@@ -865,67 +1264,228 @@ function App() {
           <section className="question-card">
             <div className="question-card-header">
               <span className="question-number">
-                {String(step + 1).padStart(2, '0')}
+                {String(
+                  step + 1,
+                ).padStart(2, '0')}
               </span>
 
               <div>
-                <h2>{currentQuestion.title}</h2>
+                <h2>
+                  {currentQuestion.title}
+                </h2>
 
-                <p>{currentQuestion.description}</p>
+                <p>
+                  {
+                    currentQuestion.description
+                  }
+                </p>
               </div>
             </div>
 
-            <div className="options">
-              {currentQuestion.options.map((option) => {
-                const optionId = String(option.id)
-                const optionLabel = String(option.label)
+            {/* ========================================
+                ОКВЭД
+                ======================================== */}
 
-                const selected =
-                  currentQuestion.key === 'needs'
-                    ? profile.needs.includes(optionId)
-                    : currentValue === optionId
+            {currentQuestion.key ===
+            'okved' ? (
+              <div className="okved-selector">
+                {profile.okvedCode ? (
+                  <div className="okved-selected">
+                    <div className="okved-selected-content">
+                      <div className="okved-selected-code">
+                        {profile.okvedCode}
+                      </div>
 
-                return (
-                  <button
-                    key={optionId}
-                    type="button"
-                    className={`option ${
-                      selected ? 'selected' : ''
-                    }`}
-                    onClick={() => {
-                      if (
-                        currentQuestion.key === 'needs'
-                      ) {
-                        setProfile((current) => ({
-                          ...current,
-                          needs: current.needs.includes(
+                      <div className="okved-selected-name">
+                        {profile.okvedName}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="okved-clear"
+                      onClick={
+                        clearOkved
+                      }
+                      aria-label="Изменить ОКВЭД"
+                    >
+                      Изменить
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="okved-search">
+                      <input
+                        type="text"
+                        value={
+                          okvedQuery
+                        }
+                        onChange={(
+                          event,
+                        ) =>
+                          setOkvedQuery(
+                            event.target
+                              .value,
+                          )
+                        }
+                        placeholder="Введите название или код деятельности"
+                        className="okved-input"
+                        autoComplete="off"
+                      />
+
+                      {okvedLoading && (
+                        <span className="okved-search-loading" />
+                      )}
+                    </div>
+
+                    {!okvedQuery.trim() && (
+                      <div className="okved-hint">
+                        Например: розничная
+                        торговля или{' '}
+                        <strong>
+                          47.11
+                        </strong>
+                      </div>
+                    )}
+
+                    {okvedQuery.trim() &&
+                      !okvedLoading &&
+                      okvedResults.length ===
+                        0 && (
+                        <div className="okved-empty">
+                          По вашему
+                          запросу ничего
+                          не найдено.
+                          <br />
+                          Попробуйте
+                          ввести другой
+                          код или
+                          название.
+                        </div>
+                      )}
+
+                    {okvedResults.length >
+                      0 && (
+                      <div className="okved-results">
+                        {okvedResults.map(
+                          (item) => (
+                            <button
+                              key={
+                                item.code
+                              }
+                              type="button"
+                              className="okved-result"
+                              onClick={() =>
+                                selectOkved(
+                                  item,
+                                )
+                              }
+                            >
+                              <span className="okved-code">
+                                {
+                                  item.code
+                                }
+                              </span>
+
+                              <span className="okved-name">
+                                {
+                                  item.name
+                                }
+                              </span>
+                            </button>
+                          ),
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              /* ========================================
+                 ОБЫЧНЫЕ ВОПРОСЫ
+                 ======================================== */
+
+              <div className="options">
+                {currentQuestion.options.map(
+                  (option) => {
+                    const optionId =
+                      String(option.id)
+
+                    const optionLabel =
+                      String(
+                        option.label,
+                      )
+
+                    const selected =
+                      currentQuestion.key ===
+                      'needs'
+                        ? profile.needs.includes(
                             optionId,
                           )
-                            ? current.needs.filter(
-                                (id) => id !== optionId,
-                              )
-                            : [
-                                ...current.needs,
-                                optionId,
-                              ],
-                        }))
-                      } else {
-                        updateProfile(
-                          currentQuestion.key,
-                          optionId,
-                        )
-                      }
-                    }}
-                  >
-                    <span>{optionLabel}</span>
+                        : currentValue ===
+                          optionId
 
-                    <span className="option-check">
-                      {selected && '✓'}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+                    return (
+                      <button
+                        key={optionId}
+                        type="button"
+                        className={`option ${
+                          selected
+                            ? 'selected'
+                            : ''
+                        }`}
+                        onClick={() => {
+                          if (
+                            currentQuestion.key ===
+                            'needs'
+                          ) {
+                            setProfile(
+                              (
+                                current,
+                              ) => ({
+                                ...current,
+                                needs:
+                                  current.needs.includes(
+                                    optionId,
+                                  )
+                                    ? current.needs.filter(
+                                        (
+                                          id,
+                                        ) =>
+                                          id !==
+                                          optionId,
+                                      )
+                                    : [
+                                        ...current.needs,
+                                        optionId,
+                                      ],
+                              }),
+                            )
+                          } else if (
+                            currentQuestion.key !==
+                            'okved'
+                          ) {
+                            updateProfile(
+                              currentQuestion.key,
+                              optionId,
+                            )
+                          }
+                        }}
+                      >
+                        <span>
+                          {optionLabel}
+                        </span>
+
+                        <span className="option-check">
+                          {selected &&
+                            ''}
+                        </span>
+                      </button>
+                    )
+                  },
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -941,15 +1501,20 @@ function App() {
           <button
             className="primary-button"
             onClick={nextStep}
-            disabled={!canContinue || matching}
+            disabled={
+              !canContinue || matching
+            }
           >
             {matching
               ? 'Подбираем...'
-              : step === questions.length - 1
+              : step ===
+                  questions.length - 1
                 ? 'Подобрать меры'
                 : 'Продолжить'}
 
-            {!matching && <span>→</span>}
+            {!matching && (
+              <span>→</span>
+            )}
           </button>
         </div>
       </main>
@@ -958,7 +1523,11 @@ function App() {
         <div className="toast">
           {error}
 
-          <button onClick={() => setError('')}>×</button>
+          <button
+            onClick={() => setError('')}
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

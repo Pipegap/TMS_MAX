@@ -546,12 +546,73 @@ p {
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #e3e5e7;
-  border-radius: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #e1e4e8;
+  border-radius: 14px;
   overflow: hidden;
+  background: #fff;
 }
 
+.info-item {
+  min-width: 0;
+  padding: 18px 16px;
+  border-right: 1px solid #e1e4e8;
+}
+
+.info-item:last-child {
+  border-right: none;
+}
+
+.info-item span {
+  display: block;
+  margin-bottom: 14px;
+  color: #8a8f98;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.info-item strong {
+  display: block;
+  color: #17191c;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .info-item {
+    border-right: 1px solid #e1e4e8;
+    border-bottom: 1px solid #e1e4e8;
+  }
+
+  .info-item:nth-child(2n) {
+    border-right: none;
+  }
+
+  .info-item:nth-last-child(-n + 2) {
+    border-bottom: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-item,
+  .info-item:nth-child(2n) {
+    border-right: none;
+    border-bottom: 1px solid #e1e4e8;
+  }
+
+  .info-item:last-child {
+    border-bottom: none;
+  }
+}
 .info-item {
   min-height: 90px;
   padding: 16px;
@@ -1066,4 +1127,286 @@ p {
   .detail-list-item {
     padding: 13px 14px;
   }
+}
+/* ОКВЭД */
+
+.okved-selector {
+  width: 100%;
+}
+
+.okved-search {
+  position: relative;
+  width: 100%;
+}
+
+.okved-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 52px;
+  padding: 0 16px;
+
+  border: 1px solid #d9dce3;
+  border-radius: 12px;
+
+  background: #ffffff;
+  color: #17181c;
+
+  font-family: inherit;
+  font-size: 15px;
+
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.okved-input::placeholder {
+  color: #9a9da5;
+}
+
+.okved-input:focus {
+  border-color: #aeb3bd;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+/* Индикатор загрузки */
+
+.okved-search-loading {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+
+  width: 16px;
+  height: 16px;
+
+  margin-top: -8px;
+
+  border: 2px solid #e1e3e8;
+  border-top-color: #555a63;
+  border-radius: 50%;
+
+  animation: okved-spin 0.7s linear infinite;
+}
+
+@keyframes okved-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Подсказка */
+
+.okved-hint {
+  margin-top: 9px;
+  padding-left: 2px;
+
+  color: #8b8f98;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* Результаты */
+
+.okved-results {
+  display: flex;
+  flex-direction: column;
+
+  margin-top: 8px;
+
+  border: 1px solid #e0e2e7;
+  border-radius: 12px;
+
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Один результат */
+
+.okved-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  width: 100%;
+  padding: 13px 15px;
+
+  border: 0;
+  border-bottom: 1px solid #eceef1;
+
+  background: #ffffff;
+
+  text-align: left;
+  font-family: inherit;
+
+  cursor: pointer;
+
+  transition: background 0.15s ease;
+}
+
+.okved-result:last-child {
+  border-bottom: 0;
+}
+
+.okved-result:hover {
+  background: #f7f7f8;
+}
+
+.okved-result:active {
+  background: #f0f1f3;
+}
+
+.okved-code {
+  margin-bottom: 3px;
+
+  color: #6f747d;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.okved-name {
+  color: #17181c;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Ничего не найдено */
+
+.okved-empty {
+  margin-top: 8px;
+  padding: 16px;
+
+  border: 1px solid #e0e2e7;
+  border-radius: 12px;
+
+  background: #ffffff;
+
+  color: #858991;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Выбранный ОКВЭД */
+
+.okved-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  min-height: 64px;
+  padding: 12px 14px;
+
+  border: 1px solid #d9dce3;
+  border-radius: 12px;
+
+  background: #ffffff;
+}
+
+.okved-selected-content {
+  min-width: 0;
+}
+
+.okved-selected-code {
+  margin-bottom: 3px;
+
+  color: #6f747d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.okved-selected-name {
+  color: #17181c;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* ==========================================
+   ВЫБРАННЫЙ ОКВЭД
+   ========================================== */
+
+.okved-selected {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid #d9dee4;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.okved-selected-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.okved-selected-code {
+  margin-bottom: 4px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #68727d;
+  font-weight: 500;
+}
+
+.okved-selected-name {
+  font-size: 14px;
+  line-height: 1.35;
+  color: #111820;
+  font-weight: 500;
+}
+
+/* Кнопка "Изменить" */
+
+.okved-selected .okved-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  height: 38px;
+  padding: 0 14px;
+
+  border: 1px solid #d5dbe1;
+  border-radius: 9px;
+
+  background: #ffffff;
+  color: #242a30;
+
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 600;
+
+  cursor: pointer;
+  white-space: nowrap;
+
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.okved-selected .okved-clear:hover {
+  background: #f5f6f7;
+  border-color: #bfc6ce;
+}
+
+.okved-selected .okved-clear:active {
+  background: #eceef0;
+}
+
+.okved-selected .okved-clear:focus-visible {
+  outline: 2px solid #111820;
+  outline-offset: 2px;
+}
+
+.okved-clear:hover {
+  background: #f1f2f4;
+  color: #17181c;
+}
+
+.okved-clear:active {
+  background: #e8e9ec;
 }
