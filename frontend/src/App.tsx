@@ -58,6 +58,7 @@ type Measure = {
   amountText?: string | null
   deadlineAt?: string | null
   isRolling?: boolean
+  isDemo?: boolean
 
   conditions?: string[]
   documents?: string[]
@@ -131,10 +132,6 @@ function formatDate(value?: string | null): string {
   }).format(date)
 }
 
-/**
- * Убираем техническую пометку [ДЕМО] из названия,
- * если она осталась в данных seed.
- */
 function cleanMeasureTitle(title: string): string {
   return title
     .replace(/^\s*\[ДЕМО\]\s*/i, '')
@@ -148,7 +145,7 @@ function formatMeasureType(type: string): string {
     microfinance: 'Микрофинансирование',
     consultation: 'Консультация',
     education: 'Обучение',
-    tax: 'Налоговая поддержка',
+    tax_benefit: 'Налоговая поддержка',
     subsidy: 'Субсидия',
     guarantee: 'Гарантийная поддержка',
     export: 'Поддержка экспорта',
@@ -190,13 +187,30 @@ function App() {
   const [error, setError] = useState('')
 
   // ==========================================
+  // ИЗБРАННОЕ
+  // ==========================================
+
+  const [favoriteIds, setFavoriteIds] =
+    useState<number[]>([])
+
+  const [favoriteMeasures, setFavoriteMeasures] =
+    useState<Measure[]>([])
+
+  const [favoriteLoading, setFavoriteLoading] =
+    useState(false)
+
+  const [favoritesOpen, setFavoritesOpen] =
+    useState(false)
+
+  // ==========================================
   // ОКВЭД
   // ==========================================
 
   const [okvedQuery, setOkvedQuery] = useState('')
   const [okvedResults, setOkvedResults] =
     useState<OkvedItem[]>([])
-  const [okvedLoading, setOkvedLoading] = useState(false)
+  const [okvedLoading, setOkvedLoading] =
+    useState(false)
 
   // ==========================================
   // ВОПРОСЫ
@@ -276,6 +290,47 @@ function App() {
       .finally(() => {
         setLoading(false)
       })
+  }, [])
+
+  // ==========================================
+  // ЗАГРУЗКА ИЗБРАННОГО
+  // ==========================================
+
+  const loadFavorites = async () => {
+    try {
+      const response = await fetch(
+        '/api/favorites',
+        {
+          headers: getAuthHeaders(),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          'Не удалось загрузить избранное',
+        )
+      }
+
+      const data: { items: Measure[] } =
+        await response.json()
+
+      setFavoriteMeasures(data.items)
+
+      setFavoriteIds(
+        data.items.map(
+          (measure) => measure.id,
+        ),
+      )
+    } catch (favoriteError) {
+      console.error(
+        '[favorites]',
+        favoriteError,
+      )
+    }
+  }
+
+  useEffect(() => {
+    void loadFavorites()
   }, [])
 
   // ==========================================
@@ -408,14 +463,17 @@ function App() {
     setError('')
 
     try {
-      const response = await fetch('/api/match', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
+      const response = await fetch(
+        '/api/match',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify(profile),
         },
-        body: JSON.stringify(profile),
-      })
+      )
 
       if (!response.ok) {
         throw new Error(
@@ -434,6 +492,50 @@ function App() {
       )
     } finally {
       setMatching(false)
+    }
+  }
+
+  // ==========================================
+  // ИЗБРАННОЕ
+  // ==========================================
+
+  const toggleFavorite = async (
+    measureId: number,
+  ) => {
+    if (favoriteLoading) {
+      return
+    }
+
+    const isFavorite =
+      favoriteIds.includes(measureId)
+
+    setFavoriteLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch(
+        `/api/favorites/${measureId}`,
+        {
+          method: isFavorite
+            ? 'DELETE'
+            : 'POST',
+          headers: getAuthHeaders(),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          'Не удалось изменить избранное',
+        )
+      }
+
+      await loadFavorites()
+    } catch {
+      setError(
+        'Не удалось изменить избранное. Попробуйте ещё раз.',
+      )
+    } finally {
+      setFavoriteLoading(false)
     }
   }
 
@@ -491,7 +593,9 @@ function App() {
     const webApp = window.WebApp
 
     if (webApp?.openLink) {
-      webApp.openLink(selectedMeasure.applyUrl)
+      webApp.openLink(
+        selectedMeasure.applyUrl,
+      )
       return
     }
 
@@ -517,7 +621,9 @@ function App() {
     const webApp = window.WebApp
 
     if (webApp?.openLink) {
-      webApp.openLink(selectedMeasure.sourceUrl)
+      webApp.openLink(
+        selectedMeasure.sourceUrl,
+      )
       return
     }
 
@@ -532,7 +638,9 @@ function App() {
   // ОКВЭД
   // ==========================================
 
-  const selectOkved = (item: OkvedItem) => {
+  const selectOkved = (
+    item: OkvedItem,
+  ) => {
     setProfile((current) => ({
       ...current,
       okvedCode: item.code,
@@ -555,11 +663,10 @@ function App() {
   }
 
   // ==========================================
-  // СБРОС
+  // ПОВТОРНОЕ ИЗМЕНЕНИЕ АНКЕТЫ
   // ==========================================
 
   const restart = () => {
-    setProfile(emptyProfile)
     setResults([])
     setSelectedMeasure(null)
     setStep(0)
@@ -567,26 +674,11 @@ function App() {
 
     setOkvedQuery('')
     setOkvedResults([])
+    setOkvedLoading(false)
 
     setError('')
   }
 
-  const goToStart = () => {
-    setSelectedMeasure(null)
-    setResults([])
-    setProfile(emptyProfile)
-    setStep(0)
-    setStarted(false)
-
-    setOkvedQuery('')
-    setOkvedResults([])
-
-    setError('')
-  }
-
-  // ==========================================
-  // ПРОГРЕСС
-  // ==========================================
 
   const progress = Math.round(
     ((Math.min(
@@ -648,6 +740,165 @@ function App() {
   }
 
   // ==========================================
+  // ЭКРАН ИЗБРАННОГО
+  // ==========================================
+
+  if (
+    favoritesOpen &&
+    !selectedMeasure
+  ) {
+    return (
+      <div className="app-shell">
+        <header className="topbar">
+          <div className="brand">
+            <div className="brand-mark">
+              М
+            </div>
+
+            <span>
+              Меры поддержки
+            </span>
+          </div>
+        </header>
+
+        <main className="page results-page">
+          <div className="results-heading">
+            <div>
+              <span className="eyebrow">
+                Сохранённые меры
+              </span>
+
+              <h1>
+                Избранное
+              </h1>
+
+              <p>
+                Здесь будут меры поддержки,
+                которые вы сохранили для
+                дальнейшего просмотра.
+              </p>
+            </div>
+
+            <button
+              className="secondary-button"
+              onClick={() =>
+                setFavoritesOpen(false)
+              }
+            >
+              ← Назад
+            </button>
+          </div>
+
+          {favoriteMeasures.length > 0 ? (
+            <div className="results-list">
+              {favoriteMeasures.map(
+                (
+                  measure,
+                  index,
+                ) => (
+                  <article
+                    className="measure-card"
+                    key={measure.id}
+                  >
+                    <div className="measure-number">
+                      {String(
+                        index + 1,
+                      ).padStart(2, '0')}
+                    </div>
+
+                    <div className="measure-content">
+                      <div className="measure-top">
+                        <span className="measure-type">
+                          {formatMeasureType(
+                            measure.type,
+                          )}
+                        </span>
+
+                        {measure.amountText && (
+                          <span className="measure-amount">
+                            {
+                              measure.amountText
+                            }
+                          </span>
+                        )}
+                      </div>
+
+                      <h2>
+                        {cleanMeasureTitle(
+                          measure.title,
+                        )}
+                      </h2>
+
+                      <p>
+                        {measure.summary}
+                      </p>
+
+                      <button
+                        className="measure-link"
+                        onClick={() =>
+                          void openMeasure(
+                            measure,
+                          )
+                        }
+                      >
+                        Подробнее
+                        <span>→</span>
+                      </button>
+                    </div>
+                  </article>
+                ),
+              )}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">
+                ☆
+              </div>
+
+              <h2>
+                В избранном пока ничего нет
+              </h2>
+
+              <p>
+                Откройте подходящую меру
+                поддержки и сохраните её,
+                чтобы вернуться к ней позже.
+              </p>
+
+              <button
+                className="primary-button"
+                onClick={() =>
+                  setFavoritesOpen(false)
+                }
+              >
+                Вернуться к подбору
+              </button>
+            </div>
+          )}
+        </main>
+
+        {detailsLoading && (
+          <div className="modal-loader">
+            <div className="loading-spinner" />
+          </div>
+        )}
+
+        {error && (
+          <div className="toast">
+            {error}
+
+            <button
+              onClick={() => setError('')}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ==========================================
   // ДЕТАЛЬНАЯ КАРТОЧКА МЕРЫ
   // ==========================================
 
@@ -660,7 +911,9 @@ function App() {
               М
             </div>
 
-            <span>Меры поддержки</span>
+            <span>
+              Меры поддержки
+            </span>
           </div>
         </header>
 
@@ -671,7 +924,7 @@ function App() {
               setSelectedMeasure(null)
             }
           >
-            ← Назад к результатам
+            ← Назад
           </button>
 
           <div className="detail-layout">
@@ -679,7 +932,9 @@ function App() {
               <div className="detail-header">
                 <div>
                   <span className="eyebrow">
-                    {selectedMeasure.type}
+                    {formatMeasureType(
+                      selectedMeasure.type,
+                    )}
                   </span>
 
                   <h1>
@@ -691,7 +946,9 @@ function App() {
 
                 {selectedMeasure.amountText && (
                   <div className="amount">
-                    {selectedMeasure.amountText}
+                    {
+                      selectedMeasure.amountText
+                    }
                   </div>
                 )}
               </div>
@@ -715,9 +972,13 @@ function App() {
                             className="reason"
                             key={reason}
                           >
-                            <span className="check">-</span>
+                            <span className="check">
+                              -
+                            </span>
 
-                            <span>{reason}</span>
+                            <span>
+                              {reason}
+                            </span>
                           </div>
                         ),
                       )}
@@ -800,7 +1061,11 @@ function App() {
                       Вид поддержки
                     </span>
 
-                    <strong>{formatMeasureType(selectedMeasure.type)}</strong>
+                    <strong>
+                      {formatMeasureType(
+                        selectedMeasure.type,
+                      )}
+                    </strong>
                   </div>
 
                   <div className="info-item">
@@ -847,6 +1112,22 @@ function App() {
               </section>
 
               <div className="detail-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() =>
+                    void toggleFavorite(
+                      selectedMeasure.id,
+                    )
+                  }
+                  disabled={favoriteLoading}
+                >
+                  {favoriteIds.includes(
+                    selectedMeasure.id,
+                  )
+                    ? '★ В избранном'
+                    : '☆ В избранное'}
+                </button>
+
                 {selectedMeasure.applyUrl ? (
                   <button
                     className="primary-button"
@@ -860,7 +1141,8 @@ function App() {
                     className="primary-button"
                     disabled
                   >
-                    Ссылка на оформление не указана
+                    Ссылка на оформление
+                    не указана
                   </button>
                 )}
 
@@ -915,8 +1197,26 @@ function App() {
               М
             </div>
 
-            <span>Меры поддержки</span>
+            <span>
+              Меры поддержки
+            </span>
           </div>
+
+          <button
+            className="topbar-back"
+            onClick={() =>
+              setFavoritesOpen(true)
+            }
+          >
+            Избранное
+
+            {favoriteMeasures.length >
+              0 && (
+              <span>
+                {favoriteMeasures.length}
+              </span>
+            )}
+          </button>
         </header>
 
         <main className="page results-page">
@@ -956,7 +1256,10 @@ function App() {
           {results.length > 0 ? (
             <div className="results-list">
               {results.map(
-                (measure, index) => (
+                (
+                  measure,
+                  index,
+                ) => (
                   <article
                     className="measure-card"
                     key={measure.id}
@@ -970,7 +1273,9 @@ function App() {
                     <div className="measure-content">
                       <div className="measure-top">
                         <span className="measure-type">
-                          {measure.type}
+                          {formatMeasureType(
+                            measure.type,
+                          )}
                         </span>
 
                         {measure.amountText && (
@@ -993,19 +1298,21 @@ function App() {
                       </p>
 
                       {measure.reasons &&
-                        measure.reasons
-                          .length > 0 && (
+                        measure.reasons.length >
+                          0 && (
                           <div className="compact-reasons">
                             {measure.reasons
                               .slice(0, 3)
                               .map(
-                                (reason) => (
+                                (
+                                  reason,
+                                ) => (
                                   <span
                                     key={
                                       reason
                                     }
                                   >
-                                     {reason}
+                                    {reason}
                                   </span>
                                 ),
                               )}
@@ -1089,10 +1396,26 @@ function App() {
               М
             </div>
 
-            <span>Меры поддержки</span>
+            <span>
+              Меры поддержки
+            </span>
           </div>
 
-          
+          <button
+            className="topbar-back"
+            onClick={() =>
+              setFavoritesOpen(true)
+            }
+          >
+            Избранное
+
+            {favoriteMeasures.length >
+              0 && (
+              <span>
+                {favoriteMeasures.length}
+              </span>
+            )}
+          </button>
         </header>
 
         <main className="page welcome-page">
@@ -1175,19 +1498,7 @@ function App() {
                 onClick={startMatching}
               >
                 Начать подбор
-
-                <span>→</span>
               </button>
-
-              <div className="welcome-meta">
-                <span>6 вопросов</span>
-
-                <span>•</span>
-
-                <span>
-                  около 1 минуты
-                </span>
-              </div>
             </div>
           </section>
         </main>
@@ -1207,14 +1518,25 @@ function App() {
             М
           </div>
 
-          <span>Меры поддержки</span>
+          <span>
+            Меры поддержки
+          </span>
         </div>
 
         <button
           className="topbar-back"
-          onClick={goToStart}
+          onClick={() =>
+            setFavoritesOpen(true)
+          }
         >
-          На главную
+          Избранное
+
+          {favoriteMeasures.length >
+            0 && (
+            <span>
+              {favoriteMeasures.length}
+            </span>
+          )}
         </button>
       </header>
 
@@ -1477,8 +1799,7 @@ function App() {
                         </span>
 
                         <span className="option-check">
-                          {selected &&
-                            ''}
+                          {selected && ''}
                         </span>
                       </button>
                     )

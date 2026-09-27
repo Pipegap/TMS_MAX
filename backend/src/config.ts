@@ -49,5 +49,5 @@ export const config = {
   botUsername: env.MAX_BOT_USERNAME,
   initDataMaxAgeSeconds: env.INIT_DATA_MAX_AGE_SECONDS,
   // В production обход авторизации невозможен, даже если флаг случайно включён.
-  devAuthBypass: env.DEV_AUTH_BYPASS,
+  devAuthBypass: env.NODE_ENV !== 'production' && env.DEV_AUTH_BYPASS,
 } as const;

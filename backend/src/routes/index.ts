@@ -70,23 +70,43 @@ api.get('/okved', async (req, res) => {
 // --- профиль ---
 api.get('/profile', requireAuth, async (_req, res) => {
   const { userId } = getAuth(res);
+
   const { rows } = await pool.query(
-    `SELECT region_id AS "regionId", business_form AS "businessForm", stage, okved_code as "okvedCode", okved_name as "okvedName", industry, employees, needs
-       FROM business_profiles WHERE user_id = $1`,
+    `
+    SELECT
+      region_id AS "regionId",
+      business_form AS "businessForm",
+      stage,
+      okved_code AS "okvedCode",
+      okved_name AS "okvedName",
+      industry,
+      employees,
+      needs
+    FROM business_profiles
+    WHERE user_id = $1
+    `,
     [userId],
   );
+
   res.json({ profile: rows[0] ?? null });
 });
 
 // --- подбор: сохраняет профиль, считает совпадения, пишет историю ---
 const summarize = (m: Measure) => ({
-  id: m.id, title: m.title, type: m.type, provider: m.provider, level: m.level,
-  summary: m.summary, amountText: m.amountText, deadlineAt: m.deadlineAt,
-  isRolling: m.isRolling, isDemo: m.isDemo,
+  id: m.id,
+  title: m.title,
+  type: m.type,
+  provider: m.provider,
+  level: m.level,
+  summary: m.summary,
+  amountText: m.amountText,
+  deadlineAt: m.deadlineAt,
+  isRolling: m.isRolling,
+  isDemo: m.isDemo,
 });
 
 api.post('/match', requireAuth, async (req, res) => {
-  const { userId } = getAuth(res)
+  const { userId } = getAuth(res);
 
   /*
    * Получаем данные анкеты.
@@ -95,28 +115,20 @@ api.post('/match', requireAuth, async (req, res) => {
    * отрасль определяем ниже автоматически
    * по выбранному ОКВЭД.
    */
-  const input = profileSchema.parse(req.body)
-  console.log('[match] input:', JSON.stringify(input, null, 2))
-  
+  const input = profileSchema.parse(req.body);
+
+  console.log('[match] input:', JSON.stringify(input, null, 2));
 
   /*
    * Определяем отрасль по ОКВЭД.
-   *
-   * Например:
-   *
-   * 26.20.43 → production
-   * 47.11    → trade
-   * 62.01    → it
-   * 56.10    → food
    */
   const profile = {
     ...input,
-    industry: industryFromOkved(
-      input.okvedCode,
-    ),
-  }
+    industry: industryFromOkved(input.okvedCode),
+  };
 
-  console.log('[match] profile:', JSON.stringify(profile, null, 2))
+  console.log('[match] profile:', JSON.stringify(profile, null, 2));
+
   /*
    * Сохраняем профиль пользователя.
    */
@@ -170,18 +182,18 @@ api.post('/match', requireAuth, async (req, res) => {
       profile.employees,
       profile.needs,
     ],
-  )
+  );
 
   /*
    * Загружаем активные меры поддержки
    * и запускаем существующий алгоритм подбора.
    */
-  const measures = await listActiveMeasures()
+  const measures = await listActiveMeasures();
 
   const items = matchMeasures(
     profile,
     measures,
-  )
+  );
 
   /*
    * Сохраняем результат подбора.
@@ -206,7 +218,7 @@ api.post('/match', requireAuth, async (req, res) => {
         (item) => item.measure.id,
       ),
     ],
-  )
+  );
 
   /*
    * Возвращаем результат фронтенду.
@@ -221,19 +233,157 @@ api.post('/match', requireAuth, async (req, res) => {
       score: item.score,
       reasons: item.reasons,
     })),
-  })
-})
+  });
+});
+
+// ======================================================
+// ИЗБРАННОЕ
+// ======================================================
+
+// Получить все избранные меры текущего пользователя.
+api.get('/favorites', requireAuth, async (_req, res) => {
+  const { userId } = getAuth(res);
+
+  const { rows } = await pool.query(
+    `
+    SELECT
+      sm.id,
+      sm.title,
+      sm.type,
+      sm.provider,
+      sm.level,
+      sm.summary,
+      sm.amount_text AS "amountText",
+      sm.deadline_at AS "deadlineAt",
+      sm.is_rolling AS "isRolling",
+      sm.is_demo AS "isDemo"
+    FROM favorites f
+    INNER JOIN support_measures sm
+      ON sm.id = f.measure_id
+    WHERE f.user_id = $1
+      AND sm.is_active = true
+    ORDER BY f.created_at DESC
+    `,
+    [userId],
+  );
+
+  res.json({
+    items: rows,
+  });
+});
+
+// Добавить меру в избранное.
+api.post('/favorites/:measureId', requireAuth, async (req, res) => {
+  const { userId } = getAuth(res);
+
+  const measureId = Number(req.params.measureId);
+
+  if (!Number.isInteger(measureId) || measureId <= 0) {
+    throw new AppError(
+      400,
+      'bad_measure_id',
+      'Некорректный идентификатор меры',
+    );
+  }
+
+  const measure = await getMeasureById(measureId);
+
+  if (!measure) {
+    throw new AppError(
+      404,
+      'not_found',
+      'Мера поддержки не найдена',
+    );
+  }
+
+  await pool.query(
+    `
+    INSERT INTO favorites (
+      user_id,
+      measure_id
+    )
+    VALUES ($1, $2)
+    ON CONFLICT (user_id, measure_id)
+    DO NOTHING
+    `,
+    [userId, measureId],
+  );
+
+  res.json({
+    success: true,
+    measureId,
+  });
+});
+
+// Удалить меру из избранного.
+api.delete('/favorites/:measureId', requireAuth, async (req, res) => {
+  const { userId } = getAuth(res);
+
+  const measureId = Number(req.params.measureId);
+
+  if (!Number.isInteger(measureId) || measureId <= 0) {
+    throw new AppError(
+      400,
+      'bad_measure_id',
+      'Некорректный идентификатор меры',
+    );
+  }
+
+  await pool.query(
+    `
+    DELETE FROM favorites
+    WHERE user_id = $1
+      AND measure_id = $2
+    `,
+    [userId, measureId],
+  );
+
+  res.json({
+    success: true,
+    measureId,
+  });
+});
 
 // --- карточка меры ---
 api.get('/measures/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) throw new AppError(400, 'bad_id', 'Некорректный идентификатор меры');
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new AppError(
+      400,
+      'bad_id',
+      'Некорректный идентификатор меры',
+    );
+  }
+
   const measure = await getMeasureById(id);
-  if (!measure) throw new AppError(404, 'not_found', 'Мера поддержки не найдена');
-  const { slug: _slug, regions: _r, forms: _f, stages: _s, industries: _i, employees: _e, needs: _n, ...card } = measure;
+
+  if (!measure) {
+    throw new AppError(
+      404,
+      'not_found',
+      'Мера поддержки не найдена',
+    );
+  }
+
+  const {
+    slug: _slug,
+    regions: _r,
+    forms: _f,
+    stages: _s,
+    industries: _i,
+    employees: _e,
+    needs: _n,
+    ...card
+  } = measure;
+
   res.json(card);
 });
 
 api.use((_req, _res) => {
-  throw new AppError(404, 'not_found', 'Метод API не найден');
+  throw new AppError(
+    404,
+    'not_found',
+    'Метод API не найден',
+  );
 });
