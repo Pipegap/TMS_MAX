@@ -94,12 +94,8 @@ const API_BASE_URL =
     : 'http://localhost:8000/api')
 
 function apiUrl(path: string): string {
-  const normalizedBase = API_BASE_URL.replace(/\/+$/, '')
-  const normalizedPath = path.startsWith('/')
-    ? path
-    : `/${path}`
-
-  return `${normalizedBase}${normalizedPath}`
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${API_BASE_URL}${normalizedPath}`
 }
 
 function getAuthHeaders(): Record<string, string> {
