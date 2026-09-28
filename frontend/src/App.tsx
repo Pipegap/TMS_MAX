@@ -54,17 +54,14 @@ type Measure = {
   provider: string
   level: string
   summary: string
-
   amountText?: string | null
   deadlineAt?: string | null
   isRolling?: boolean
   isDemo?: boolean
-
   conditions?: string[]
   documents?: string[]
   applyUrl?: string | null
   sourceUrl?: string | null
-
   score?: number
   reasons?: string[]
 }
@@ -86,6 +83,25 @@ type Question = {
 
 const DEV_USER_ID = '123456789'
 
+/**
+ * В production frontend обращается напрямую к backend RelaxDev.
+ * В development используется локальный backend.
+ */
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.PROD
+    ? 'https://tms-max.relaxdev.ru/api'
+    : 'http://localhost:8000/api')
+
+function apiUrl(path: string): string {
+  const normalizedBase = API_BASE_URL.replace(/\/+$/, '')
+  const normalizedPath = path.startsWith('/')
+    ? path
+    : `/${path}`
+
+  return `${normalizedBase}${normalizedPath}`
+}
+
 function getAuthHeaders(): Record<string, string> {
   const initData = window.WebApp?.initData
 
@@ -100,10 +116,6 @@ function getAuthHeaders(): Record<string, string> {
   }
 }
 
-/**
- * Приводит дату из backend к удобному виду:
- * 2026-12-31 → 31 декабря 2026
- */
 function formatDate(value?: string | null): string {
   if (!value) {
     return ''
@@ -186,10 +198,6 @@ function App() {
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // ==========================================
-  // ИЗБРАННОЕ
-  // ==========================================
-
   const [favoriteIds, setFavoriteIds] =
     useState<number[]>([])
 
@@ -202,19 +210,11 @@ function App() {
   const [favoritesOpen, setFavoritesOpen] =
     useState(false)
 
-  // ==========================================
-  // ОКВЭД
-  // ==========================================
-
   const [okvedQuery, setOkvedQuery] = useState('')
   const [okvedResults, setOkvedResults] =
     useState<OkvedItem[]>([])
   const [okvedLoading, setOkvedLoading] =
     useState(false)
-
-  // ==========================================
-  // ВОПРОСЫ
-  // ==========================================
 
   const questions = useMemo<Question[]>(
     () => [
@@ -248,16 +248,14 @@ function App() {
       },
       {
         key: 'employees',
-        title:
-          'Сколько сотрудников работает в бизнесе?',
+        title: 'Сколько сотрудников работает в бизнесе?',
         description:
           'Количество сотрудников используется для отбора подходящих программ.',
         options: dictionaries?.employees ?? [],
       },
       {
         key: 'needs',
-        title:
-          'Какая поддержка вам сейчас нужна?',
+        title: 'Какая поддержка вам сейчас нужна?',
         description:
           'Можно выбрать одну или несколько задач, которые вы хотите решить.',
         options: dictionaries?.needs ?? [],
@@ -266,40 +264,59 @@ function App() {
     [dictionaries],
   )
 
-  // ==========================================
-  // ЗАГРУЗКА СПРАВОЧНИКОВ
-  // ==========================================
-
   useEffect(() => {
-    fetch('/api/dictionaries')
-      .then(async (response) => {
+    let cancelled = false
+
+    const loadDictionaries = async () => {
+      try {
+        setLoading(true)
+        setError('')
+
+        const response = await fetch(
+          apiUrl('/dictionaries'),
+        )
+
         if (!response.ok) {
           throw new Error(
-            'Не удалось загрузить справочники',
+            `HTTP ${response.status}`,
           )
         }
 
-        return response.json()
-      })
-      .then((data) => {
-        setDictionaries(data)
-      })
-      .catch(() => {
-        setError('Не удалось загрузить данные анкеты')
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-  }, [])
+        const data: Dictionary =
+          await response.json()
 
-  // ==========================================
-  // ЗАГРУЗКА ИЗБРАННОГО
-  // ==========================================
+        if (!cancelled) {
+          setDictionaries(data)
+        }
+      } catch (requestError) {
+        console.error(
+          '[dictionaries]',
+          requestError,
+        )
+
+        if (!cancelled) {
+          setError(
+            'Не удалось загрузить данные анкеты',
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadDictionaries()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadFavorites = async () => {
     try {
       const response = await fetch(
-        '/api/favorites',
+        apiUrl('/favorites'),
         {
           headers: getAuthHeaders(),
         },
@@ -307,7 +324,7 @@ function App() {
 
       if (!response.ok) {
         throw new Error(
-          'Не удалось загрузить избранное',
+          `HTTP ${response.status}`,
         )
       }
 
@@ -333,10 +350,6 @@ function App() {
     void loadFavorites()
   }, [])
 
-  // ==========================================
-  // ПОИСК ОКВЭД
-  // ==========================================
-
   const searchOkved = async (query: string) => {
     const value = query.trim()
 
@@ -350,12 +363,16 @@ function App() {
 
     try {
       const response = await fetch(
-        `/api/okved?query=${encodeURIComponent(value)}`,
+        apiUrl(
+          `/okved?query=${encodeURIComponent(
+            value,
+          )}`,
+        ),
       )
 
       if (!response.ok) {
         throw new Error(
-          'Не удалось загрузить ОКВЭД',
+          `HTTP ${response.status}`,
         )
       }
 
@@ -364,7 +381,11 @@ function App() {
 
       setOkvedResults(data.items)
     } catch (searchError) {
-      console.error(searchError)
+      console.error(
+        '[okved]',
+        searchError,
+      )
+
       setOkvedResults([])
     } finally {
       setOkvedLoading(false)
@@ -386,10 +407,6 @@ function App() {
     }
   }, [okvedQuery, step, questions])
 
-  // ==========================================
-  // ТЕКУЩИЙ ВОПРОС
-  // ==========================================
-
   const currentQuestion = questions[step]
 
   const currentValue =
@@ -407,10 +424,6 @@ function App() {
         : Boolean(currentValue)
     : false
 
-  // ==========================================
-  // ИЗМЕНЕНИЕ ПРОФИЛЯ
-  // ==========================================
-
   const updateProfile = (
     key:
       | 'regionId'
@@ -424,10 +437,6 @@ function App() {
       [key]: value,
     }))
   }
-
-  // ==========================================
-  // НАВИГАЦИЯ
-  // ==========================================
 
   const startMatching = () => {
     setStarted(true)
@@ -454,17 +463,13 @@ function App() {
     }
   }
 
-  // ==========================================
-  // ПОДБОР МЕР
-  // ==========================================
-
   const handleMatch = async () => {
     setMatching(true)
     setError('')
 
     try {
       const response = await fetch(
-        '/api/match',
+        apiUrl('/match'),
         {
           method: 'POST',
           headers: {
@@ -476,8 +481,16 @@ function App() {
       )
 
       if (!response.ok) {
+        const text = await response.text()
+
+        console.error(
+          '[match]',
+          response.status,
+          text,
+        )
+
         throw new Error(
-          'Не удалось выполнить подбор',
+          `HTTP ${response.status}`,
         )
       }
 
@@ -486,7 +499,12 @@ function App() {
       setResults(data.items ?? [])
       setSelectedMeasure(null)
       setStep(questions.length)
-    } catch {
+    } catch (matchError) {
+      console.error(
+        '[match]',
+        matchError,
+      )
+
       setError(
         'Не удалось подобрать меры поддержки. Попробуйте ещё раз.',
       )
@@ -494,10 +512,6 @@ function App() {
       setMatching(false)
     }
   }
-
-  // ==========================================
-  // ИЗБРАННОЕ
-  // ==========================================
 
   const toggleFavorite = async (
     measureId: number,
@@ -514,7 +528,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `/api/favorites/${measureId}`,
+        apiUrl(`/favorites/${measureId}`),
         {
           method: isFavorite
             ? 'DELETE'
@@ -525,12 +539,17 @@ function App() {
 
       if (!response.ok) {
         throw new Error(
-          'Не удалось изменить избранное',
+          `HTTP ${response.status}`,
         )
       }
 
       await loadFavorites()
-    } catch {
+    } catch (favoriteError) {
+      console.error(
+        '[favorites]',
+        favoriteError,
+      )
+
       setError(
         'Не удалось изменить избранное. Попробуйте ещё раз.',
       )
@@ -538,10 +557,6 @@ function App() {
       setFavoriteLoading(false)
     }
   }
-
-  // ==========================================
-  // КАРТОЧКА МЕРЫ
-  // ==========================================
 
   const openMeasure = async (
     measure: Measure,
@@ -551,7 +566,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `/api/measures/${measure.id}`,
+        apiUrl(`/measures/${measure.id}`),
         {
           headers: getAuthHeaders(),
         },
@@ -559,7 +574,7 @@ function App() {
 
       if (!response.ok) {
         throw new Error(
-          'Не удалось загрузить карточку',
+          `HTTP ${response.status}`,
         )
       }
 
@@ -569,7 +584,12 @@ function App() {
         ...measure,
         ...details,
       })
-    } catch {
+    } catch (detailsError) {
+      console.error(
+        '[measure]',
+        detailsError,
+      )
+
       setError(
         'Не удалось загрузить информацию о мере поддержки.',
       )
@@ -577,10 +597,6 @@ function App() {
       setDetailsLoading(false)
     }
   }
-
-  // ==========================================
-  // ССЫЛКА НА ОФОРМЛЕНИЕ
-  // ==========================================
 
   const openApplyLink = () => {
     if (!selectedMeasure?.applyUrl) {
@@ -606,10 +622,6 @@ function App() {
     )
   }
 
-  // ==========================================
-  // ССЫЛКА НА ОФИЦИАЛЬНУЮ ИНФОРМАЦИЮ
-  // ==========================================
-
   const openSourceLink = () => {
     if (!selectedMeasure?.sourceUrl) {
       setError(
@@ -633,10 +645,6 @@ function App() {
       'noopener,noreferrer',
     )
   }
-
-  // ==========================================
-  // ОКВЭД
-  // ==========================================
 
   const selectOkved = (
     item: OkvedItem,
@@ -662,10 +670,6 @@ function App() {
     setOkvedResults([])
   }
 
-  // ==========================================
-  // ПОВТОРНОЕ ИЗМЕНЕНИЕ АНКЕТЫ
-  // ==========================================
-
   const restart = () => {
     setResults([])
     setSelectedMeasure(null)
@@ -679,7 +683,6 @@ function App() {
     setError('')
   }
 
-
   const progress = Math.round(
     ((Math.min(
       step,
@@ -690,25 +693,16 @@ function App() {
       100,
   )
 
-  // ==========================================
-  // ЗАГРУЗКА
-  // ==========================================
-
   if (loading) {
     return (
       <div className="app-shell">
         <div className="loading-screen">
           <div className="loading-spinner" />
-
           <p>Загружаем сервис</p>
         </div>
       </div>
     )
   }
-
-  // ==========================================
-  // ОШИБКА ЗАГРУЗКИ
-  // ==========================================
 
   if (error && !dictionaries) {
     return (
@@ -739,10 +733,6 @@ function App() {
     )
   }
 
-  // ==========================================
-  // ЭКРАН ИЗБРАННОГО
-  // ==========================================
-
   if (
     favoritesOpen &&
     !selectedMeasure
@@ -768,9 +758,7 @@ function App() {
                 Сохранённые меры
               </span>
 
-              <h1>
-                Избранное
-              </h1>
+              <h1>Избранное</h1>
 
               <p>
                 Здесь будут меры поддержки,
@@ -897,10 +885,6 @@ function App() {
       </div>
     )
   }
-
-  // ==========================================
-  // ДЕТАЛЬНАЯ КАРТОЧКА МЕРЫ
-  // ==========================================
 
   if (selectedMeasure) {
     return (
@@ -1184,10 +1168,6 @@ function App() {
     )
   }
 
-  // ==========================================
-  // РЕЗУЛЬТАТЫ
-  // ==========================================
-
   if (step === questions.length) {
     return (
       <div className="app-shell">
@@ -1383,10 +1363,6 @@ function App() {
     )
   }
 
-  // ==========================================
-  // СТАРТОВЫЙ ЭКРАН
-  // ==========================================
-
   if (!started) {
     return (
       <div className="app-shell">
@@ -1506,10 +1482,6 @@ function App() {
     )
   }
 
-  // ==========================================
-  // АНКЕТА
-  // ==========================================
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -1603,10 +1575,6 @@ function App() {
                 </p>
               </div>
             </div>
-
-            {/* ========================================
-                ОКВЭД
-                ======================================== */}
 
             {currentQuestion.key ===
             'okved' ? (
@@ -1723,10 +1691,6 @@ function App() {
                 )}
               </div>
             ) : (
-              /* ========================================
-                 ОБЫЧНЫЕ ВОПРОСЫ
-                 ======================================== */
-
               <div className="options">
                 {currentQuestion.options.map(
                   (option) => {
