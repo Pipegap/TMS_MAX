@@ -1,19 +1,61 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 
+type Option = {
+  code: string
+  name: string
+}
+
+type Dictionaries = {
+  regions: Option[]
+  legalForms: Option[]
+  businessStages: Option[]
+  employeeRanges: Option[]
+  equipment: Option[]
+}
+
+type Profile = {
+  region: string
+  legalForm: string
+  businessStage: string
+  okvedCode: string
+  okvedName: string
+  employees: string
+  equipment: string
+}
+
+type Measure = {
+  id: number
+  name: string
+  shortDescription: string
+  description?: string
+  provider?: string
+  region?: string
+  legalForms?: string[]
+  businessStages?: string[]
+  employeeRanges?: string[]
+  equipment?: string[]
+  okvedCodes?: string[]
+  tags?: string[]
+  isDemo?: boolean
+}
+
+type MatchResponse = {
+  measures: Measure[]
+}
+
+type OkvedItem = {
+  code: string
+  name: string
+  level?: number
+  isLeaf?: boolean
+}
+
 type MaxWebApp = {
-  initData: string
-  initDataUnsafe?: {
-    user?: {
-      id: number
-      first_name: string
-      last_name?: string
-      username?: string
-    }
-  }
-  platform?: string
-  version?: string
-  openLink?: (url: string) => void
+  initData?: string
+  ready?: () => void
+  expand?: () => void
+  close?: () => void
 }
 
 declare global {
@@ -22,282 +64,130 @@ declare global {
   }
 }
 
-type Dictionary = {
-  regions: { id: string; label: string }[]
-  businessForms: { id: string; label: string }[]
-  stages: { id: string; label: string }[]
-  industries: { id: string; label: string }[]
-  employees: { id: string; label: string }[]
-  needs: { id: string; label: string }[]
-}
-
-type OkvedItem = {
-  code: string
-  name: string
-}
-
-type Profile = {
-  regionId: string
-  businessForm: string
-  stage: string
-  okvedCode: string
-  okvedName: string
-  industry: string
-  employees: string
-  needs: string[]
-}
-
-type Measure = {
-  id: number
-  title: string
-  type: string
-  provider: string
-  level: string
-  summary: string
-  amountText?: string | null
-  deadlineAt?: string | null
-  isRolling?: boolean
-  isDemo?: boolean
-  conditions?: string[]
-  documents?: string[]
-  applyUrl?: string | null
-  sourceUrl?: string | null
-  score?: number
-  reasons?: string[]
-}
-
-type QuestionKey =
-  | 'regionId'
-  | 'businessForm'
-  | 'stage'
-  | 'okved'
-  | 'employees'
-  | 'needs'
-
-type Question = {
-  key: QuestionKey
-  title: string
-  description: string
-  options: { id: string; label: string }[]
-}
-
-const DEV_USER_ID = '123456789'
-
-/**
- * В production frontend обращается напрямую к backend RelaxDev.
- * В development используется локальный backend.
+/*
+ * ВАЖНО:
+ * Backend расположен отдельно от frontend.
+ * Все API-запросы должны идти через:
+ *
+ * https://tms-max.relaxdev.ru/api/...
+ *
+ * Поэтому /api добавляется здесь принудительно.
  */
-const API_BASE_URL =
+const RAW_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD
-    ? 'https://tms-max.relaxdev.ru/api'
-    : 'http://localhost:8000/api')
+    ? 'https://tms-max.relaxdev.ru'
+    : 'http://localhost:8000')
+
+const API_BASE_URL = RAW_API_BASE_URL
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '')
 
 function apiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  return `${API_BASE_URL}${normalizedPath}`
+  return `${API_BASE_URL}/api${normalizedPath}`
+}
+
+function getInitData(): string {
+  return window.WebApp?.initData ?? ''
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const initData = window.WebApp?.initData
+  const initData = getInitData()
 
-  if (initData) {
-    return {
-      Authorization: `MaxWebApp ${initData}`,
-    }
-  }
-
-  return {
-    'x-dev-user-id': DEV_USER_ID,
-  }
+  return initData
+    ? {
+        Authorization: `Bearer ${initData}`,
+      }
+    : {}
 }
 
-function formatDate(value?: string | null): string {
-  if (!value) {
-    return ''
+async function fetchJson<T>(
+  url: string,
+  options?: RequestInit,
+): Promise<T> {
+  const response = await fetch(url, options)
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
   }
 
-  const [year, month, day] = value.split('-')
-
-  if (!year || !month || !day) {
-    return value
-  }
-
-  const date = new Date(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-  )
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
-}
-
-function cleanMeasureTitle(title: string): string {
-  return title
-    .replace(/^\s*\[ДЕМО\]\s*/i, '')
-    .trim()
-}
-
-function formatMeasureType(type: string): string {
-  const types: Record<string, string> = {
-    grant: 'Грант',
-    loan: 'Льготный заём',
-    microfinance: 'Микрофинансирование',
-    consultation: 'Консультация',
-    education: 'Обучение',
-    tax_benefit: 'Налоговая поддержка',
-    subsidy: 'Субсидия',
-    guarantee: 'Гарантийная поддержка',
-    export: 'Поддержка экспорта',
-    property: 'Имущественная поддержка',
-    information: 'Информационная поддержка',
-  }
-
-  return types[type] ?? type
-}
-
-const emptyProfile: Profile = {
-  regionId: '',
-  businessForm: '',
-  stage: '',
-  okvedCode: '',
-  okvedName: '',
-  industry: '',
-  employees: '',
-  needs: [],
+  return response.json() as Promise<T>
 }
 
 function App() {
-  const [dictionaries, setDictionaries] =
-    useState<Dictionary | null>(null)
-
-  const [profile, setProfile] =
-    useState<Profile>(emptyProfile)
-
-  const [started, setStarted] = useState(false)
-  const [step, setStep] = useState(0)
-
-  const [results, setResults] = useState<Measure[]>([])
-  const [selectedMeasure, setSelectedMeasure] =
-    useState<Measure | null>(null)
-
-  const [loading, setLoading] = useState(true)
-  const [matching, setMatching] = useState(false)
-  const [detailsLoading, setDetailsLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const [favoriteIds, setFavoriteIds] =
-    useState<number[]>([])
-
-  const [favoriteMeasures, setFavoriteMeasures] =
-    useState<Measure[]>([])
-
-  const [favoriteLoading, setFavoriteLoading] =
-    useState(false)
-
-  const [favoritesOpen, setFavoritesOpen] =
-    useState(false)
+  const [dictionaries, setDictionaries] = useState<Dictionaries | null>(null)
+  const [profile, setProfile] = useState<Profile>({
+    region: '',
+    legalForm: '',
+    businessStage: '',
+    okvedCode: '',
+    okvedName: '',
+    employees: '',
+    equipment: '',
+  })
 
   const [okvedQuery, setOkvedQuery] = useState('')
-  const [okvedResults, setOkvedResults] =
-    useState<OkvedItem[]>([])
-  const [okvedLoading, setOkvedLoading] =
-    useState(false)
+  const [okvedResults, setOkvedResults] = useState<OkvedItem[]>([])
+  const [showOkvedResults, setShowOkvedResults] = useState(false)
 
-  const questions = useMemo<Question[]>(
-    () => [
-      {
-        key: 'regionId',
-        title: 'Где зарегистрирован ваш бизнес?',
-        description:
-          'Регион регистрации влияет на доступные меры поддержки.',
-        options: dictionaries?.regions ?? [],
-      },
-      {
-        key: 'businessForm',
-        title: 'Как оформлен бизнес?',
-        description:
-          'Выберите организационно-правовую форму.',
-        options: dictionaries?.businessForms ?? [],
-      },
-      {
-        key: 'stage',
-        title: 'На каком этапе находится бизнес?',
-        description:
-          'Это поможет подобрать программы для вашей текущей ситуации.',
-        options: dictionaries?.stages ?? [],
-      },
-      {
-        key: 'okved',
-        title: 'Чем занимается ваш бизнес?',
-        description:
-          'Выберите основной вид деятельности по коду ОКВЭД.',
-        options: [],
-      },
-      {
-        key: 'employees',
-        title: 'Сколько сотрудников работает в бизнесе?',
-        description:
-          'Количество сотрудников используется для отбора подходящих программ.',
-        options: dictionaries?.employees ?? [],
-      },
-      {
-        key: 'needs',
-        title: 'Какая поддержка вам сейчас нужна?',
-        description:
-          'Можно выбрать одну или несколько задач, которые вы хотите решить.',
-        options: dictionaries?.needs ?? [],
-      },
-    ],
-    [dictionaries],
-  )
+  const [measures, setMeasures] = useState<Measure[]>([])
+  const [favorites, setFavorites] = useState<number[]>([])
+  const [selectedMeasure, setSelectedMeasure] = useState<Measure | null>(null)
 
+  const [loadingDictionaries, setLoadingDictionaries] = useState(true)
+  const [loadingFavorites, setLoadingFavorites] = useState(false)
+  const [loadingMatch, setLoadingMatch] = useState(false)
+  const [loadingOkved, setLoadingOkved] = useState(false)
+
+  const [error, setError] = useState('')
+  const [matchDone, setMatchDone] = useState(false)
+
+
+
+  /*
+   * Инициализация MAX Mini App
+   */
+  useEffect(() => {
+    try {
+      window.WebApp?.ready?.()
+      window.WebApp?.expand?.()
+    } catch {
+      // Работа в обычном браузере допустима.
+    }
+  }, [])
+
+  /*
+   * Загружаем справочники.
+   *
+   * ВАЖНО:
+   * URL получается:
+   * https://tms-max.relaxdev.ru/api/dictionaries
+   */
   useEffect(() => {
     let cancelled = false
 
-    const loadDictionaries = async () => {
+    async function loadDictionaries() {
       try {
-        setLoading(true)
+        setLoadingDictionaries(true)
         setError('')
 
-        const response = await fetch(
+        const data = await fetchJson<Dictionaries>(
           apiUrl('/dictionaries'),
         )
-
-        if (!response.ok) {
-          throw new Error(
-            `HTTP ${response.status}`,
-          )
-        }
-
-        const data: Dictionary =
-          await response.json()
 
         if (!cancelled) {
           setDictionaries(data)
         }
-      } catch (requestError) {
-        console.error(
-          '[dictionaries]',
-          requestError,
-        )
+      } catch (err) {
+        console.error('[dictionaries] Error:', err)
 
         if (!cancelled) {
-          setError(
-            'Не удалось загрузить данные анкеты',
-          )
+          setError('Не удалось загрузить данные сервиса')
         }
       } finally {
         if (!cancelled) {
-          setLoading(false)
+          setLoadingDictionaries(false)
         }
       }
     }
@@ -309,353 +199,121 @@ function App() {
     }
   }, [])
 
-  const loadFavorites = async () => {
+  /*
+   * Загружаем избранное.
+   *
+   * URL:
+   * https://tms-max.relaxdev.ru/api/favorites
+   */
+  const loadFavorites = useCallback(async () => {
     try {
-      const response = await fetch(
-        apiUrl('/favorites'),
-        {
-          headers: getAuthHeaders(),
-        },
-      )
+      setLoadingFavorites(true)
 
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`,
-        )
+      const data = await fetchJson<
+        number[] | { ids?: number[]; favorites?: number[] }
+      >(apiUrl('/favorites'), {
+        headers: getAuthHeaders(),
+      })
+
+      if (Array.isArray(data)) {
+        setFavorites(data)
+      } else {
+        setFavorites(data.ids ?? data.favorites ?? [])
       }
+    } catch (err) {
+      console.error('[favorites] Error:', err)
 
-      const data: { items: Measure[] } =
-        await response.json()
-
-      setFavoriteMeasures(data.items)
-
-      setFavoriteIds(
-        data.items.map(
-          (measure) => measure.id,
-        ),
-      )
-    } catch (favoriteError) {
-      console.error(
-        '[favorites]',
-        favoriteError,
-      )
+      /*
+       * Если приложение открыто не внутри MAX,
+       * backend может не принять initData.
+       * В таком случае не ломаем интерфейс.
+       */
+      setFavorites([])
+    } finally {
+      setLoadingFavorites(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void loadFavorites()
-  }, [])
+  }, [loadFavorites])
 
-  const searchOkved = async (query: string) => {
-    const value = query.trim()
-
-    if (!value) {
-      setOkvedResults([])
-      setOkvedLoading(false)
-      return
-    }
-
-    setOkvedLoading(true)
-
-    try {
-      const response = await fetch(
-        apiUrl(
-          `/okved?query=${encodeURIComponent(
-            value,
-          )}`,
-        ),
-      )
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`,
-        )
-      }
-
-      const data: { items: OkvedItem[] } =
-        await response.json()
-
-      setOkvedResults(data.items)
-    } catch (searchError) {
-      console.error(
-        '[okved]',
-        searchError,
-      )
-
-      setOkvedResults([])
-    } finally {
-      setOkvedLoading(false)
-    }
-  }
-
+  /*
+   * Поиск ОКВЭД
+   */
   useEffect(() => {
-    if (questions[step]?.key !== 'okved') {
+    const query = okvedQuery.trim()
+
+    if (query.length < 2) {
       setOkvedResults([])
+      setShowOkvedResults(false)
       return
     }
 
-    const timer = window.setTimeout(() => {
-      void searchOkved(okvedQuery)
-    }, 300)
+    let cancelled = false
+
+    const timer = window.setTimeout(async () => {
+      try {
+        setLoadingOkved(true)
+
+        const data = await fetchJson<
+          OkvedItem[] | { items?: OkvedItem[]; results?: OkvedItem[] }
+        >(
+          apiUrl(`/okved?q=${encodeURIComponent(query)}`),
+        )
+
+        if (cancelled) {
+          return
+        }
+
+        const items = Array.isArray(data)
+          ? data
+          : data.items ?? data.results ?? []
+
+        setOkvedResults(items)
+        setShowOkvedResults(true)
+      } catch (err) {
+        console.error('[okved] Error:', err)
+
+        if (!cancelled) {
+          setOkvedResults([])
+          setShowOkvedResults(false)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingOkved(false)
+        }
+      }
+    }, 250)
 
     return () => {
+      cancelled = true
       window.clearTimeout(timer)
     }
-  }, [okvedQuery, step, questions])
+  }, [okvedQuery])
 
-  const currentQuestion = questions[step]
-
-  const currentValue =
-    currentQuestion &&
-    currentQuestion.key !== 'okved' &&
-    currentQuestion.key !== 'needs'
-      ? profile[currentQuestion.key]
-      : ''
-
-  const canContinue = currentQuestion
-    ? currentQuestion.key === 'needs'
-      ? profile.needs.length > 0
-      : currentQuestion.key === 'okved'
-        ? Boolean(profile.okvedCode)
-        : Boolean(currentValue)
-    : false
-
-  const updateProfile = (
-    key:
-      | 'regionId'
-      | 'businessForm'
-      | 'stage'
-      | 'employees',
-    value: string,
-  ) => {
+  function updateProfile<K extends keyof Profile>(
+    key: K,
+    value: Profile[K],
+  ) {
     setProfile((current) => ({
       ...current,
       [key]: value,
     }))
   }
 
-  const startMatching = () => {
-    setStarted(true)
-    setStep(0)
-    setError('')
-  }
-
-  const nextStep = () => {
-    if (!canContinue) {
-      return
-    }
-
-    if (step < questions.length - 1) {
-      setStep((current) => current + 1)
-      return
-    }
-
-    void handleMatch()
-  }
-
-  const previousStep = () => {
-    if (step > 0) {
-      setStep((current) => current - 1)
-    }
-  }
-
-  const handleMatch = async () => {
-    setMatching(true)
-    setError('')
-
-    try {
-      const response = await fetch(
-        apiUrl('/match'),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify(profile),
-        },
-      )
-
-      if (!response.ok) {
-        const text = await response.text()
-
-        console.error(
-          '[match]',
-          response.status,
-          text,
-        )
-
-        throw new Error(
-          `HTTP ${response.status}`,
-        )
-      }
-
-      const data = await response.json()
-
-      setResults(data.items ?? [])
-      setSelectedMeasure(null)
-      setStep(questions.length)
-    } catch (matchError) {
-      console.error(
-        '[match]',
-        matchError,
-      )
-
-      setError(
-        'Не удалось подобрать меры поддержки. Попробуйте ещё раз.',
-      )
-    } finally {
-      setMatching(false)
-    }
-  }
-
-  const toggleFavorite = async (
-    measureId: number,
-  ) => {
-    if (favoriteLoading) {
-      return
-    }
-
-    const isFavorite =
-      favoriteIds.includes(measureId)
-
-    setFavoriteLoading(true)
-    setError('')
-
-    try {
-      const response = await fetch(
-        apiUrl(`/favorites/${measureId}`),
-        {
-          method: isFavorite
-            ? 'DELETE'
-            : 'POST',
-          headers: getAuthHeaders(),
-        },
-      )
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`,
-        )
-      }
-
-      await loadFavorites()
-    } catch (favoriteError) {
-      console.error(
-        '[favorites]',
-        favoriteError,
-      )
-
-      setError(
-        'Не удалось изменить избранное. Попробуйте ещё раз.',
-      )
-    } finally {
-      setFavoriteLoading(false)
-    }
-  }
-
-  const openMeasure = async (
-    measure: Measure,
-  ) => {
-    setDetailsLoading(true)
-    setError('')
-
-    try {
-      const response = await fetch(
-        apiUrl(`/measures/${measure.id}`),
-        {
-          headers: getAuthHeaders(),
-        },
-      )
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status}`,
-        )
-      }
-
-      const details = await response.json()
-
-      setSelectedMeasure({
-        ...measure,
-        ...details,
-      })
-    } catch (detailsError) {
-      console.error(
-        '[measure]',
-        detailsError,
-      )
-
-      setError(
-        'Не удалось загрузить информацию о мере поддержки.',
-      )
-    } finally {
-      setDetailsLoading(false)
-    }
-  }
-
-  const openApplyLink = () => {
-    if (!selectedMeasure?.applyUrl) {
-      setError(
-        'Ссылка на оформление для этой меры пока не указана.',
-      )
-      return
-    }
-
-    const webApp = window.WebApp
-
-    if (webApp?.openLink) {
-      webApp.openLink(
-        selectedMeasure.applyUrl,
-      )
-      return
-    }
-
-    window.open(
-      selectedMeasure.applyUrl,
-      '_blank',
-      'noopener,noreferrer',
-    )
-  }
-
-  const openSourceLink = () => {
-    if (!selectedMeasure?.sourceUrl) {
-      setError(
-        'Официальный источник для этой меры пока не указан.',
-      )
-      return
-    }
-
-    const webApp = window.WebApp
-
-    if (webApp?.openLink) {
-      webApp.openLink(
-        selectedMeasure.sourceUrl,
-      )
-      return
-    }
-
-    window.open(
-      selectedMeasure.sourceUrl,
-      '_blank',
-      'noopener,noreferrer',
-    )
-  }
-
-  const selectOkved = (
-    item: OkvedItem,
-  ) => {
+  function selectOkved(item: OkvedItem) {
     setProfile((current) => ({
       ...current,
       okvedCode: item.code,
       okvedName: item.name,
     }))
 
-    setOkvedQuery('')
-    setOkvedResults([])
+    setOkvedQuery(`${item.code} — ${item.name}`)
+    setShowOkvedResults(false)
   }
 
-  const clearOkved = () => {
+  function clearOkved() {
     setProfile((current) => ({
       ...current,
       okvedCode: '',
@@ -664,1154 +322,548 @@ function App() {
 
     setOkvedQuery('')
     setOkvedResults([])
+    setShowOkvedResults(false)
   }
 
-  const restart = () => {
-    setResults([])
-    setSelectedMeasure(null)
-    setStep(0)
-    setStarted(true)
+  /*
+   * Подбор мер поддержки.
+   *
+   * URL:
+   * https://tms-max.relaxdev.ru/api/match
+   */
+  async function handleMatch() {
+    try {
+      setLoadingMatch(true)
+      setError('')
+      setMatchDone(false)
+
+      const payload = {
+        region: profile.region || undefined,
+        legalForm: profile.legalForm || undefined,
+        businessStage: profile.businessStage || undefined,
+        okvedCode: profile.okvedCode || undefined,
+        employees: profile.employees || undefined,
+        equipment: profile.equipment || undefined,
+      }
+
+      const data = await fetchJson<MatchResponse | Measure[]>(
+        apiUrl('/match'),
+        {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+      )
+
+      const result = Array.isArray(data)
+        ? data
+        : data.measures ?? []
+
+      setMeasures(result)
+      setMatchDone(true)
+    } catch (err) {
+      console.error('[match] Error:', err)
+      setError('Не удалось подобрать меры поддержки')
+      setMeasures([])
+    } finally {
+      setLoadingMatch(false)
+    }
+  }
+
+  /*
+   * Добавление / удаление из избранного.
+   *
+   * URL:
+   * https://tms-max.relaxdev.ru/api/favorites/:id
+   */
+  async function toggleFavorite(measureId: number) {
+    const isFavorite = favorites.includes(measureId)
+
+    try {
+      const response = await fetch(
+        apiUrl(`/favorites/${measureId}`),
+        {
+          method: isFavorite ? 'DELETE' : 'POST',
+          headers: getAuthHeaders(),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      setFavorites((current) =>
+        isFavorite
+          ? current.filter((id) => id !== measureId)
+          : [...current, measureId],
+      )
+    } catch (err) {
+      console.error('[favorites] Error:', err)
+      setError('Не удалось изменить избранное')
+    }
+  }
+
+  /*
+   * Детальная информация о мере.
+   *
+   * URL:
+   * https://tms-max.relaxdev.ru/api/measures/:id
+   */
+  async function openMeasure(measure: Measure) {
+    try {
+      const detailed = await fetchJson<Measure>(
+        apiUrl(`/measures/${measure.id}`),
+        {
+          headers: getAuthHeaders(),
+        },
+      )
+
+      setSelectedMeasure(detailed)
+    } catch (err) {
+      console.error('[measure] Error:', err)
+
+      /*
+       * Если detail endpoint недоступен,
+       * всё равно показываем данные из результата подбора.
+       */
+      setSelectedMeasure(measure)
+    }
+  }
+
+  function resetForm() {
+    setProfile({
+      region: '',
+      legalForm: '',
+      businessStage: '',
+      okvedCode: '',
+      okvedName: '',
+      employees: '',
+      equipment: '',
+    })
 
     setOkvedQuery('')
     setOkvedResults([])
-    setOkvedLoading(false)
-
+    setShowOkvedResults(false)
+    setMeasures([])
+    setMatchDone(false)
     setError('')
   }
 
-  const progress = Math.round(
-    ((Math.min(
-      step,
-      questions.length - 1,
-    ) +
-      1) /
-      questions.length) *
-      100,
-  )
-
-  if (loading) {
+  if (loadingDictionaries) {
     return (
-      <div className="app-shell">
-        <div className="loading-screen">
-          <div className="loading-spinner" />
-          <p>Загружаем сервис</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !dictionaries) {
-    return (
-      <div className="app-shell">
-        <main className="error-screen">
-          <div className="error-card">
-            <span className="eyebrow">
-              Ошибка
-            </span>
-
-            <h1>
-              Не удалось загрузить сервис
-            </h1>
-
-            <p>{error}</p>
-
-            <button
-              className="primary-button"
-              onClick={() =>
-                window.location.reload()
-              }
-            >
-              Попробовать снова
-            </button>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  if (
-    favoritesOpen &&
-    !selectedMeasure
-  ) {
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">
-              М
-            </div>
-
-            <span>
-              Меры поддержки
-            </span>
-          </div>
-        </header>
-
-        <main className="page results-page">
-          <div className="results-heading">
-            <div>
-              <span className="eyebrow">
-                Сохранённые меры
-              </span>
-
-              <h1>Избранное</h1>
-
-              <p>
-                Здесь будут меры поддержки,
-                которые вы сохранили для
-                дальнейшего просмотра.
-              </p>
-            </div>
-
-            <button
-              className="secondary-button"
-              onClick={() =>
-                setFavoritesOpen(false)
-              }
-            >
-              ← Назад
-            </button>
-          </div>
-
-          {favoriteMeasures.length > 0 ? (
-            <div className="results-list">
-              {favoriteMeasures.map(
-                (
-                  measure,
-                  index,
-                ) => (
-                  <article
-                    className="measure-card"
-                    key={measure.id}
-                  >
-                    <div className="measure-number">
-                      {String(
-                        index + 1,
-                      ).padStart(2, '0')}
-                    </div>
-
-                    <div className="measure-content">
-                      <div className="measure-top">
-                        <span className="measure-type">
-                          {formatMeasureType(
-                            measure.type,
-                          )}
-                        </span>
-
-                        {measure.amountText && (
-                          <span className="measure-amount">
-                            {
-                              measure.amountText
-                            }
-                          </span>
-                        )}
-                      </div>
-
-                      <h2>
-                        {cleanMeasureTitle(
-                          measure.title,
-                        )}
-                      </h2>
-
-                      <p>
-                        {measure.summary}
-                      </p>
-
-                      <button
-                        className="measure-link"
-                        onClick={() =>
-                          void openMeasure(
-                            measure,
-                          )
-                        }
-                      >
-                        Подробнее
-                        <span>→</span>
-                      </button>
-                    </div>
-                  </article>
-                ),
-              )}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-icon">
-                ☆
-              </div>
-
-              <h2>
-                В избранном пока ничего нет
-              </h2>
-
-              <p>
-                Откройте подходящую меру
-                поддержки и сохраните её,
-                чтобы вернуться к ней позже.
-              </p>
-
-              <button
-                className="primary-button"
-                onClick={() =>
-                  setFavoritesOpen(false)
-                }
-              >
-                Вернуться к подбору
-              </button>
-            </div>
-          )}
-        </main>
-
-        {detailsLoading && (
-          <div className="modal-loader">
-            <div className="loading-spinner" />
-          </div>
-        )}
-
-        {error && (
-          <div className="toast">
-            {error}
-
-            <button
-              onClick={() => setError('')}
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (selectedMeasure) {
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">
-              М
-            </div>
-
-            <span>
-              Меры поддержки
-            </span>
-          </div>
-        </header>
-
-        <main className="page detail-page">
-          <button
-            className="back-link"
-            onClick={() =>
-              setSelectedMeasure(null)
-            }
-          >
-            ← Назад
-          </button>
-
-          <div className="detail-layout">
-            <article className="detail-card">
-              <div className="detail-header">
-                <div>
-                  <span className="eyebrow">
-                    {formatMeasureType(
-                      selectedMeasure.type,
-                    )}
-                  </span>
-
-                  <h1>
-                    {cleanMeasureTitle(
-                      selectedMeasure.title,
-                    )}
-                  </h1>
-                </div>
-
-                {selectedMeasure.amountText && (
-                  <div className="amount">
-                    {
-                      selectedMeasure.amountText
-                    }
-                  </div>
-                )}
-              </div>
-
-              <p className="detail-summary">
-                {selectedMeasure.summary}
-              </p>
-
-              {selectedMeasure.reasons &&
-                selectedMeasure.reasons.length >
-                  0 && (
-                  <section className="detail-section">
-                    <h2>
-                      Почему подходит вам
-                    </h2>
-
-                    <div className="reason-list">
-                      {selectedMeasure.reasons.map(
-                        (reason) => (
-                          <div
-                            className="reason"
-                            key={reason}
-                          >
-                            <span className="check">
-                              -
-                            </span>
-
-                            <span>
-                              {reason}
-                            </span>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </section>
-                )}
-
-              {selectedMeasure.conditions &&
-                selectedMeasure.conditions.length >
-                  0 && (
-                  <section className="detail-section">
-                    <h2>
-                      Основные условия
-                    </h2>
-
-                    <div className="detail-list">
-                      {selectedMeasure.conditions.map(
-                        (
-                          condition,
-                          index,
-                        ) => (
-                          <div
-                            className="detail-list-item"
-                            key={`${condition}-${index}`}
-                          >
-                            <span className="list-marker">
-                              -
-                            </span>
-
-                            <span>
-                              {condition}
-                            </span>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </section>
-                )}
-
-              {selectedMeasure.documents &&
-                selectedMeasure.documents.length >
-                  0 && (
-                  <section className="detail-section">
-                    <h2>
-                      Необходимые документы
-                    </h2>
-
-                    <div className="detail-list">
-                      {selectedMeasure.documents.map(
-                        (
-                          document,
-                          index,
-                        ) => (
-                          <div
-                            className="detail-list-item"
-                            key={`${document}-${index}`}
-                          >
-                            <span className="list-marker">
-                              -
-                            </span>
-
-                            <span>
-                              {document}
-                            </span>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </section>
-                )}
-
-              <section className="detail-section">
-                <h2>
-                  Основная информация
-                </h2>
-
-                <div className="info-grid">
-                  <div className="info-item">
-                    <span>
-                      Вид поддержки
-                    </span>
-
-                    <strong>
-                      {formatMeasureType(
-                        selectedMeasure.type,
-                      )}
-                    </strong>
-                  </div>
-
-                  <div className="info-item">
-                    <span>
-                      Организация
-                    </span>
-
-                    <strong>
-                      {
-                        selectedMeasure.provider
-                      }
-                    </strong>
-                  </div>
-
-                  <div className="info-item">
-                    <span>
-                      Уровень поддержки
-                    </span>
-
-                    <strong>
-                      {selectedMeasure.level ===
-                      'federal'
-                        ? 'Федеральный'
-                        : 'Региональный'}
-                    </strong>
-                  </div>
-
-                  <div className="info-item">
-                    <span>
-                      Срок
-                    </span>
-
-                    <strong>
-                      {selectedMeasure.isRolling
-                        ? 'Приём постоянно'
-                        : selectedMeasure.deadlineAt
-                          ? `До ${formatDate(
-                              selectedMeasure.deadlineAt,
-                            )}`
-                          : 'Уточняется'}
-                    </strong>
-                  </div>
-                </div>
-              </section>
-
-              <div className="detail-actions">
-                <button
-                  className="secondary-button"
-                  onClick={() =>
-                    void toggleFavorite(
-                      selectedMeasure.id,
-                    )
-                  }
-                  disabled={favoriteLoading}
-                >
-                  {favoriteIds.includes(
-                    selectedMeasure.id,
-                  )
-                    ? '★ В избранном'
-                    : '☆ В избранное'}
-                </button>
-
-                {selectedMeasure.applyUrl ? (
-                  <button
-                    className="primary-button"
-                    onClick={openApplyLink}
-                  >
-                    Перейти к оформлению
-                    <span>↗</span>
-                  </button>
-                ) : (
-                  <button
-                    className="primary-button"
-                    disabled
-                  >
-                    Ссылка на оформление
-                    не указана
-                  </button>
-                )}
-
-                {selectedMeasure.sourceUrl && (
-                  <button
-                    className="secondary-button"
-                    onClick={openSourceLink}
-                  >
-                    Официальная информация
-                    <span>↗</span>
-                  </button>
-                )}
-
-                <button
-                  className="secondary-button"
-                  onClick={() =>
-                    setSelectedMeasure(null)
-                  }
-                >
-                  Вернуться к мерам
-                </button>
-              </div>
-            </article>
-          </div>
-        </main>
-
-        {error && (
-          <div className="toast">
-            {error}
-
-            <button
-              onClick={() => setError('')}
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (step === questions.length) {
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">
-              М
-            </div>
-
-            <span>
-              Меры поддержки
-            </span>
-          </div>
-
-          <button
-            className="topbar-back"
-            onClick={() =>
-              setFavoritesOpen(true)
-            }
-          >
-            Избранное
-
-            {favoriteMeasures.length >
-              0 && (
-              <span>
-                {favoriteMeasures.length}
-              </span>
-            )}
-          </button>
-        </header>
-
-        <main className="page results-page">
-          <div className="results-heading">
-            <div>
-              <span className="eyebrow">
-                Результат подбора
-              </span>
-
-              <h1>
-                {results.length > 0
-                  ? 'Подходящие меры поддержки'
-                  : 'Подходящих мер не найдено'}
-              </h1>
-
-              <p>
-                {results.length > 0
-                  ? `Для вашего бизнеса найдено ${
-                      results.length
-                    } ${
-                      results.length === 1
-                        ? 'подходящее решение'
-                        : 'подходящих решений'
-                    }.`
-                  : 'Попробуйте изменить параметры анкеты — это может расширить список доступных программ.'}
-              </p>
-            </div>
-
-            <button
-              className="secondary-button"
-              onClick={restart}
-            >
-              Изменить параметры
-            </button>
-          </div>
-
-          {results.length > 0 ? (
-            <div className="results-list">
-              {results.map(
-                (
-                  measure,
-                  index,
-                ) => (
-                  <article
-                    className="measure-card"
-                    key={measure.id}
-                  >
-                    <div className="measure-number">
-                      {String(
-                        index + 1,
-                      ).padStart(2, '0')}
-                    </div>
-
-                    <div className="measure-content">
-                      <div className="measure-top">
-                        <span className="measure-type">
-                          {formatMeasureType(
-                            measure.type,
-                          )}
-                        </span>
-
-                        {measure.amountText && (
-                          <span className="measure-amount">
-                            {
-                              measure.amountText
-                            }
-                          </span>
-                        )}
-                      </div>
-
-                      <h2>
-                        {cleanMeasureTitle(
-                          measure.title,
-                        )}
-                      </h2>
-
-                      <p>
-                        {measure.summary}
-                      </p>
-
-                      {measure.reasons &&
-                        measure.reasons.length >
-                          0 && (
-                          <div className="compact-reasons">
-                            {measure.reasons
-                              .slice(0, 3)
-                              .map(
-                                (
-                                  reason,
-                                ) => (
-                                  <span
-                                    key={
-                                      reason
-                                    }
-                                  >
-                                    {reason}
-                                  </span>
-                                ),
-                              )}
-                          </div>
-                        )}
-
-                      <button
-                        className="measure-link"
-                        onClick={() =>
-                          void openMeasure(
-                            measure,
-                          )
-                        }
-                      >
-                        Подробнее
-                        <span>→</span>
-                      </button>
-                    </div>
-                  </article>
-                ),
-              )}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-icon">
-                ⌕
-              </div>
-
-              <h2>
-                Попробуем найти другие
-                варианты
-              </h2>
-
-              <p>
-                Измените регион, цель или
-                другие параметры бизнеса и
-                повторите подбор.
-              </p>
-
-              <button
-                className="primary-button"
-                onClick={restart}
-              >
-                Изменить параметры
-              </button>
-            </div>
-          )}
-        </main>
-
-        {detailsLoading && (
-          <div className="modal-loader">
-            <div className="loading-spinner" />
-          </div>
-        )}
-
-        {error && (
-          <div className="toast">
-            {error}
-
-            <button
-              onClick={() => setError('')}
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (!started) {
-    return (
-      <div className="app-shell">
-        <header className="topbar">
-          <div className="brand">
-            <div className="brand-mark">
-              М
-            </div>
-
-            <span>
-              Меры поддержки
-            </span>
-          </div>
-
-          <button
-            className="topbar-back"
-            onClick={() =>
-              setFavoritesOpen(true)
-            }
-          >
-            Избранное
-
-            {favoriteMeasures.length >
-              0 && (
-              <span>
-                {favoriteMeasures.length}
-              </span>
-            )}
-          </button>
-        </header>
-
-        <main className="page welcome-page">
-          <section className="welcome-card">
-            <div className="welcome-content">
-              <span className="eyebrow">
-                Подбор поддержки
-              </span>
-
-              <h1>
-                Подберём меры поддержки
-                <br />
-                для вашего бизнеса
-              </h1>
-
-              <p className="welcome-description">
-                Не знаете, какая поддержка
-                вам подходит? Ответьте на
-                несколько вопросов — сервис
-                подберёт программы с учётом
-                региона, формы бизнеса,
-                отрасли и ваших целей.
-              </p>
-
-              <div className="welcome-features">
-                <div className="welcome-feature">
-                  <span className="welcome-feature-icon">
-                    01
-                  </span>
-
-                  <div>
-                    <strong>
-                      Ответьте на вопросы
-                    </strong>
-
-                    <span>
-                      Расскажите немного о
-                      своём бизнесе
-                    </span>
-                  </div>
-                </div>
-
-                <div className="welcome-feature">
-                  <span className="welcome-feature-icon">
-                    02
-                  </span>
-
-                  <div>
-                    <strong>
-                      Получите подборку
-                    </strong>
-
-                    <span>
-                      Мы найдём подходящие
-                      программы
-                    </span>
-                  </div>
-                </div>
-
-                <div className="welcome-feature">
-                  <span className="welcome-feature-icon">
-                    03
-                  </span>
-
-                  <div>
-                    <strong>
-                      Изучите условия
-                    </strong>
-
-                    <span>
-                      Посмотрите подробности
-                      каждой меры
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                className="primary-button welcome-button"
-                onClick={startMatching}
-              >
-                Начать подбор
-              </button>
-            </div>
-          </section>
-        </main>
-      </div>
-    )
-  }
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">
-            М
-          </div>
-
-          <span>
-            Меры поддержки
-          </span>
-        </div>
-
-        <button
-          className="topbar-back"
-          onClick={() =>
-            setFavoritesOpen(true)
-          }
-        >
-          Избранное
-
-          {favoriteMeasures.length >
-            0 && (
-            <span>
-              {favoriteMeasures.length}
-            </span>
-          )}
-        </button>
-      </header>
-
-      <main className="page questionnaire-page">
-        <div className="questionnaire-header">
-          <div>
-            <span className="eyebrow">
-              Подбор поддержки
-            </span>
-
-            <h1>
-              Найдём подходящие меры
-              <br />
-              для вашего бизнеса
-            </h1>
-
-            <p>
-              Ответьте на несколько вопросов.
-              Мы подберём программы,
-              соответствующие параметрам
-              вашего бизнеса.
-            </p>
-          </div>
-        </div>
-
-        <div className="progress-block">
-          <div className="progress-info">
-            <span>
-              Вопрос {step + 1} из{' '}
-              {questions.length}
-            </span>
-
-            <span>{progress}%</span>
-          </div>
-
-          <div className="progress-track">
-            <div
-              className="progress-value"
-              style={{
-                width: `${progress}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {currentQuestion && (
-          <section className="question-card">
-            <div className="question-card-header">
-              <span className="question-number">
-                {String(
-                  step + 1,
-                ).padStart(2, '0')}
-              </span>
-
-              <div>
-                <h2>
-                  {currentQuestion.title}
-                </h2>
-
-                <p>
-                  {
-                    currentQuestion.description
-                  }
-                </p>
-              </div>
-            </div>
-
-            {currentQuestion.key ===
-            'okved' ? (
-              <div className="okved-selector">
-                {profile.okvedCode ? (
-                  <div className="okved-selected">
-                    <div className="okved-selected-content">
-                      <div className="okved-selected-code">
-                        {profile.okvedCode}
-                      </div>
-
-                      <div className="okved-selected-name">
-                        {profile.okvedName}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="okved-clear"
-                      onClick={
-                        clearOkved
-                      }
-                      aria-label="Изменить ОКВЭД"
-                    >
-                      Изменить
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="okved-search">
-                      <input
-                        type="text"
-                        value={
-                          okvedQuery
-                        }
-                        onChange={(
-                          event,
-                        ) =>
-                          setOkvedQuery(
-                            event.target
-                              .value,
-                          )
-                        }
-                        placeholder="Введите название или код деятельности"
-                        className="okved-input"
-                        autoComplete="off"
-                      />
-
-                      {okvedLoading && (
-                        <span className="okved-search-loading" />
-                      )}
-                    </div>
-
-                    {!okvedQuery.trim() && (
-                      <div className="okved-hint">
-                        Например: розничная
-                        торговля или{' '}
-                        <strong>
-                          47.11
-                        </strong>
-                      </div>
-                    )}
-
-                    {okvedQuery.trim() &&
-                      !okvedLoading &&
-                      okvedResults.length ===
-                        0 && (
-                        <div className="okved-empty">
-                          По вашему
-                          запросу ничего
-                          не найдено.
-                          <br />
-                          Попробуйте
-                          ввести другой
-                          код или
-                          название.
-                        </div>
-                      )}
-
-                    {okvedResults.length >
-                      0 && (
-                      <div className="okved-results">
-                        {okvedResults.map(
-                          (item) => (
-                            <button
-                              key={
-                                item.code
-                              }
-                              type="button"
-                              className="okved-result"
-                              onClick={() =>
-                                selectOkved(
-                                  item,
-                                )
-                              }
-                            >
-                              <span className="okved-code">
-                                {
-                                  item.code
-                                }
-                              </span>
-
-                              <span className="okved-name">
-                                {
-                                  item.name
-                                }
-                              </span>
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="options">
-                {currentQuestion.options.map(
-                  (option) => {
-                    const optionId =
-                      String(option.id)
-
-                    const optionLabel =
-                      String(
-                        option.label,
-                      )
-
-                    const selected =
-                      currentQuestion.key ===
-                      'needs'
-                        ? profile.needs.includes(
-                            optionId,
-                          )
-                        : currentValue ===
-                          optionId
-
-                    return (
-                      <button
-                        key={optionId}
-                        type="button"
-                        className={`option ${
-                          selected
-                            ? 'selected'
-                            : ''
-                        }`}
-                        onClick={() => {
-                          if (
-                            currentQuestion.key ===
-                            'needs'
-                          ) {
-                            setProfile(
-                              (
-                                current,
-                              ) => ({
-                                ...current,
-                                needs:
-                                  current.needs.includes(
-                                    optionId,
-                                  )
-                                    ? current.needs.filter(
-                                        (
-                                          id,
-                                        ) =>
-                                          id !==
-                                          optionId,
-                                      )
-                                    : [
-                                        ...current.needs,
-                                        optionId,
-                                      ],
-                              }),
-                            )
-                          } else if (
-                            currentQuestion.key !==
-                            'okved'
-                          ) {
-                            updateProfile(
-                              currentQuestion.key,
-                              optionId,
-                            )
-                          }
-                        }}
-                      >
-                        <span>
-                          {optionLabel}
-                        </span>
-
-                        <span className="option-check">
-                          {selected && ''}
-                        </span>
-                      </button>
-                    )
-                  },
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        <div className="question-actions">
-          <button
-            className="secondary-button"
-            onClick={previousStep}
-            disabled={step === 0}
-          >
-            ← Назад
-          </button>
-
-          <button
-            className="primary-button"
-            onClick={nextStep}
-            disabled={
-              !canContinue || matching
-            }
-          >
-            {matching
-              ? 'Подбираем...'
-              : step ===
-                  questions.length - 1
-                ? 'Подобрать меры'
-                : 'Продолжить'}
-
-            {!matching && (
-              <span>→</span>
-            )}
-          </button>
+      <main className="app">
+        <div className="loading">
+          <div className="spinner" />
+          <p>Загружаем сервис...</p>
         </div>
       </main>
+    )
+  }
+
+  const regions = dictionaries?.regions ?? []
+  const legalForms = dictionaries?.legalForms ?? []
+  const businessStages = dictionaries?.businessStages ?? []
+  const employeeRanges = dictionaries?.employeeRanges ?? []
+  const equipment = dictionaries?.equipment ?? []
+
+  return (
+    <main className="app">
+      <header className="header">
+        <div>
+          <div className="eyebrow">MAX × МЕРЫ ПОДДЕРЖКИ</div>
+          <h1>Поддержка для бизнеса</h1>
+          <p className="subtitle">
+            Заполните короткую анкету — сервис подберёт подходящие меры
+            поддержки для вашего бизнеса.
+          </p>
+        </div>
+      </header>
 
       {error && (
-        <div className="toast">
-          {error}
-
+        <div className="error-banner">
+          <span>{error}</span>
           <button
+            type="button"
             onClick={() => setError('')}
+            aria-label="Закрыть"
           >
             ×
           </button>
         </div>
       )}
-    </div>
+
+      <section className="card">
+        <div className="card-header">
+          <div>
+            <div className="section-number">01</div>
+            <h2>О вашем бизнесе</h2>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <label className="field">
+            <span>Регион</span>
+            <select
+              value={profile.region}
+              onChange={(event) =>
+                updateProfile('region', event.target.value)
+              }
+            >
+              <option value="">Выберите регион</option>
+              {regions.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Организационно-правовая форма</span>
+            <select
+              value={profile.legalForm}
+              onChange={(event) =>
+                updateProfile('legalForm', event.target.value)
+              }
+            >
+              <option value="">Выберите форму</option>
+              {legalForms.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Стадия бизнеса</span>
+            <select
+              value={profile.businessStage}
+              onChange={(event) =>
+                updateProfile('businessStage', event.target.value)
+              }
+            >
+              <option value="">Выберите стадию</option>
+              {businessStages.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="field okved-field">
+            <span>Основной ОКВЭД</span>
+
+            <div className="okved-input-wrapper">
+              <input
+                type="text"
+                value={okvedQuery}
+                placeholder="Введите код или название"
+                onChange={(event) => {
+                  setOkvedQuery(event.target.value)
+                  if (profile.okvedCode) {
+                    setProfile((current) => ({
+                      ...current,
+                      okvedCode: '',
+                      okvedName: '',
+                    }))
+                  }
+                }}
+                onFocus={() => {
+                  if (okvedResults.length > 0) {
+                    setShowOkvedResults(true)
+                  }
+                }}
+              />
+
+              {profile.okvedCode && (
+                <button
+                  type="button"
+                  className="clear-button"
+                  onClick={clearOkved}
+                  aria-label="Очистить ОКВЭД"
+                >
+                  ×
+                </button>
+              )}
+
+              {showOkvedResults && (
+                <div className="okved-results">
+                  {loadingOkved && (
+                    <div className="okved-loading">
+                      Ищем...
+                    </div>
+                  )}
+
+                  {!loadingOkved &&
+                    okvedResults.length === 0 && (
+                      <div className="okved-empty">
+                        Ничего не найдено
+                      </div>
+                    )}
+
+                  {!loadingOkved &&
+                    okvedResults.map((item) => (
+                      <button
+                        type="button"
+                        className="okved-result"
+                        key={item.code}
+                        onClick={() => selectOkved(item)}
+                      >
+                        <strong>{item.code}</strong>
+                        <span>{item.name}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {profile.okvedCode && (
+              <small className="selected-okved">
+                Выбран: {profile.okvedCode} — {profile.okvedName}
+              </small>
+            )}
+          </div>
+
+          <label className="field">
+            <span>Количество сотрудников</span>
+            <select
+              value={profile.employees}
+              onChange={(event) =>
+                updateProfile('employees', event.target.value)
+              }
+            >
+              <option value="">Выберите диапазон</option>
+              {employeeRanges.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            <span>Нужно оборудование?</span>
+            <select
+              value={profile.equipment}
+              onChange={(event) =>
+                updateProfile('equipment', event.target.value)
+              }
+            >
+              <option value="">Выберите вариант</option>
+              {equipment.map((item) => (
+                <option key={item.code} value={item.code}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={handleMatch}
+            disabled={loadingMatch}
+          >
+            {loadingMatch ? 'Подбираем...' : 'Подобрать меры поддержки'}
+          </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={resetForm}
+          >
+            Очистить
+          </button>
+        </div>
+      </section>
+
+      {matchDone && (
+        <section className="results-section">
+          <div className="results-header">
+            <div>
+              <div className="section-number">02</div>
+              <h2>Подходящие меры</h2>
+              <p>
+                Найдено: {measures.length}
+              </p>
+            </div>
+          </div>
+
+          {measures.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">—</div>
+              <h3>Подходящих мер пока не найдено</h3>
+              <p>
+                Попробуйте изменить параметры анкеты и выполнить
+                подбор ещё раз.
+              </p>
+            </div>
+          ) : (
+            <div className="measures-grid">
+              {measures.map((measure) => {
+                const isFavorite = favorites.includes(measure.id)
+
+                return (
+                  <article
+                    className="measure-card"
+                    key={measure.id}
+                  >
+                    <div className="measure-top">
+                      <span className="measure-id">
+                        МЕРА #{measure.id}
+                      </span>
+
+                      <button
+                        type="button"
+                        className={`favorite-button ${
+                          isFavorite ? 'active' : ''
+                        }`}
+                        onClick={() =>
+                          void toggleFavorite(measure.id)
+                        }
+                        disabled={loadingFavorites}
+                        aria-label={
+                          isFavorite
+                            ? 'Удалить из избранного'
+                            : 'Добавить в избранное'
+                        }
+                      >
+                        {isFavorite ? '★' : '☆'}
+                      </button>
+                    </div>
+
+                    <h3>{measure.name}</h3>
+
+                    {measure.shortDescription && (
+                      <p className="measure-description">
+                        {measure.shortDescription}
+                      </p>
+                    )}
+
+                    {measure.provider && (
+                      <div className="measure-meta">
+                        <span>Организатор</span>
+                        <strong>{measure.provider}</strong>
+                      </div>
+                    )}
+
+                    {measure.isDemo && (
+                      <div className="demo-label">
+                        Демо-данные для прототипа
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="details-button"
+                      onClick={() =>
+                        void openMeasure(measure)
+                      }
+                    >
+                      Подробнее
+                      <span>→</span>
+                    </button>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {selectedMeasure && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setSelectedMeasure(null)}
+        >
+          <div
+            className="modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setSelectedMeasure(null)}
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
+
+            <div className="modal-label">
+              МЕРА #{selectedMeasure.id}
+            </div>
+
+            <h2>{selectedMeasure.name}</h2>
+
+            {selectedMeasure.shortDescription && (
+              <p className="modal-description">
+                {selectedMeasure.shortDescription}
+              </p>
+            )}
+
+            {selectedMeasure.description && (
+              <div className="modal-block">
+                <h3>Описание</h3>
+                <p>{selectedMeasure.description}</p>
+              </div>
+            )}
+
+            {selectedMeasure.provider && (
+              <div className="modal-block">
+                <h3>Организатор</h3>
+                <p>{selectedMeasure.provider}</p>
+              </div>
+            )}
+
+            {selectedMeasure.region && (
+              <div className="modal-block">
+                <h3>Регион</h3>
+                <p>{selectedMeasure.region}</p>
+              </div>
+            )}
+
+            {selectedMeasure.tags &&
+              selectedMeasure.tags.length > 0 && (
+                <div className="tags">
+                  {selectedMeasure.tags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+              )}
+
+            {selectedMeasure.isDemo && (
+              <div className="demo-label modal-demo">
+                Данные подготовлены для демонстрации прототипа
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="primary-button modal-button"
+              onClick={() =>
+                void toggleFavorite(selectedMeasure.id)
+              }
+            >
+              {favorites.includes(selectedMeasure.id)
+                ? 'Удалить из избранного'
+                : 'Добавить в избранное'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <footer className="footer">
+        <span>MAX × МЕРЫ ПОДДЕРЖКИ</span>
+        <span>Прототип</span>
+      </footer>
+    </main>
   )
 }
 
