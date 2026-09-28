@@ -44,7 +44,10 @@ function getLevel(code: string): number {
   return code.split('.').length;
 }
 
-async function importOkved() {
+export async function importOkved(): Promise<{
+  total: number;
+  leaves: number;
+}> {
   if (!fs.existsSync(csvPath)) {
     throw new Error(`Файл ОКВЭД не найден: ${csvPath}`);
   }
@@ -90,17 +93,6 @@ async function importOkved() {
       );
     }
 
-    /*
-     * Конечный код — тот, для которого нет более подробного
-     * дочернего кода.
-     *
-     * Например:
-     * 01.11 -> не конечный,
-     * потому что существует 01.11.1.
-     *
-     * 01.11.1 -> конечный,
-     * если более глубоких кодов для него нет.
-     */
     await client.query(`
       UPDATE okved o
       SET is_leaf = NOT EXISTS (
@@ -122,11 +114,17 @@ async function importOkved() {
       FROM okved
     `);
 
-    const stats = countResult.rows[0];
+    const total = Number(countResult.rows[0]?.total ?? 0);
+    const leaves = Number(countResult.rows[0]?.leaves ?? 0);
 
     console.log(
-      `[okved] импортировано: ${stats?.total ?? 0}, конечных кодов: ${stats?.leaves ?? 0}`,
+      `[okved] импортировано: ${total}, конечных кодов: ${leaves}`,
     );
+
+    return {
+      total,
+      leaves,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -135,11 +133,17 @@ async function importOkved() {
   }
 }
 
-importOkved()
-  .catch((error) => {
-    console.error('[okved] ошибка импорта:', error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await pool.end();
-  });
+const isDirectRun =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === __filename;
+
+if (isDirectRun) {
+  importOkved()
+    .catch((error) => {
+      console.error('[okved] ошибка импорта:', error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await pool.end();
+    });
+}
