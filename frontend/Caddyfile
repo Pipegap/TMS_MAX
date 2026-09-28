@@ -1,13 +1,13 @@
-{$DOMAIN} {
-	encode gzip zstd
+:{$PORT} {
+    encode gzip zstd
 
-	handle /api/* {
-		reverse_proxy backend_api:8000
-	}
+    handle /api/* {
+        reverse_proxy https://tmsmaxbackend-production.up.railway.app
+    }
 
-	handle {
-		root * /srv
-		try_files {path} /index.html
-		file_server
-	}
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
 }
