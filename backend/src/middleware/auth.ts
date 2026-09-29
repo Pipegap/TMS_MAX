@@ -5,18 +5,15 @@ import { pool } from '../db/pool.js';
 import { validateInitData } from '../auth/initData.js';
 
 export interface AuthContext {
-  userId: number;     // внутренний id в нашей БД
-  maxUserId: string;  // id пользователя в MAX (BIGINT -> строка)
+  userId: number;    
+  maxUserId: string;  
   firstName: string;
   startParam?: string;
 }
 
 const SCHEME = 'MaxWebApp ';
 
-/**
- * Клиент шлёт заголовок:  Authorization: MaxWebApp <window.WebApp.initData>
- * user_id берём ТОЛЬКО из проверенного initData, никогда из тела запроса.
- */
+
 export const requireAuth: RequestHandler = async (req: Request, res: Response, next) => {
   let maxUserId: string;
   let firstName: string;

@@ -100,10 +100,7 @@ export const profileSchema = z.object({
     error: 'Выберите стадию бизнеса',
   }),
 
-  /*
-   * ОКВЭД теперь является основным источником информации
-   * об отрасли бизнеса.
-   */
+
   okvedCode: z
     .string()
     .trim()
@@ -116,11 +113,7 @@ export const profileSchema = z.object({
     .min(1, 'Выберите ОКВЭД')
     .max(500),
 
-  /*
-   * Отрасль больше НЕ обязательна от клиента.
-   * Backend определяет её самостоятельно через ОКВЭД.
-   */
-  // industry определяется сервером по ОКВЭД
+ 
   industry: z.string().optional(),
 
   employees: z.enum(idsOf(EMPLOYEES), {

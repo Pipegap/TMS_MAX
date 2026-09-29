@@ -15,17 +15,11 @@ export type InitDataResult =
 
 export interface ValidateOptions {
   maxAgeSeconds: number;
-  /** Unix-время в секундах; для тестов. */
+ 
   now?: number;
 }
 
-/**
- * Проверка подписи initData по алгоритму MAX (dev.max.ru/docs/webapps/validation):
- *   secret_key = HMAC_SHA256(key="WebAppData", msg=BOT_TOKEN)
- *   hash       = hex(HMAC_SHA256(key=secret_key, msg=launch_params))
- * launch_params — пары key=value (значения URL-декодированы), без hash, отсортированы по ключу, через \n.
- * `initData` — это значение window.WebApp.initData, присланное клиентом как есть.
- */
+
 export function validateInitData(initData: string, botToken: string, opts: ValidateOptions): InitDataResult {
   if (!initData || initData.length > 8192) return { ok: false, reason: 'malformed' };
 

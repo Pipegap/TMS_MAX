@@ -2,10 +2,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from './pool.js';
-
-// src/db и dist/db лежат на одном уровне вложенности -> ../../migrations работает и в dev, и в Docker.
 const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../migrations');
-const LOCK_ID = 727301; // advisory lock, чтобы два процесса не мигрировали одновременно
+const LOCK_ID = 727301; 
 
 export async function runMigrations(): Promise<void> {
   const client = await pool.connect();

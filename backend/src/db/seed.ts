@@ -39,7 +39,6 @@ const seedSchema = z.array(
   }),
 );
 
-/** Идемпотентно: обновляет по slug, отсутствующие в файле меры помечает неактивными. */
 export async function seedMeasures(): Promise<number> {
   const parsed = seedSchema.safeParse(JSON.parse(await readFile(SEED_FILE, 'utf8')));
   if (!parsed.success) {

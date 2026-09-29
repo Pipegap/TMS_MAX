@@ -645,7 +645,6 @@ p {
   border-top: 1px solid #e7e9eb;
 }
 
-/* Loading / errors */
 
 .loading-screen {
   min-height: 100vh;
@@ -866,9 +865,6 @@ p {
   }
 }
 
-/* ==========================================
-   START / WELCOME SCREEN
-   ========================================== */
 
 .welcome-page {
   min-height: calc(100vh - 72px);
@@ -987,9 +983,7 @@ p {
 }
 
 
-/* ==========================================
-   MOBILE
-   ========================================== */
+
 
 @media (max-width: 700px) {
   .welcome-page {
@@ -1039,9 +1033,7 @@ p {
   }
 }
 
-/* ==========================================
-   FULL MEASURE CARD
-   ========================================== */
+
 
 .demo-badge {
   display: inline-flex;
@@ -1109,9 +1101,7 @@ p {
 }
 
 
-/* ==========================================
-   MOBILE MEASURE CARD
-   ========================================== */
+
 
 @media (max-width: 700px) {
   .detail-actions {
@@ -1220,7 +1210,6 @@ p {
   overflow: hidden;
 }
 
-/* Один результат */
 
 .okved-result {
   display: flex;
@@ -1286,7 +1275,7 @@ p {
   text-align: center;
 }
 
-/* Выбранный ОКВЭД */
+
 
 .okved-selected {
   display: flex;
@@ -1321,9 +1310,7 @@ p {
   line-height: 20px;
 }
 
-/* ==========================================
-   ВЫБРАННЫЙ ОКВЭД
-   ========================================== */
+
 
 .okved-selected {
   display: flex;
@@ -1357,7 +1344,6 @@ p {
   font-weight: 500;
 }
 
-/* Кнопка "Изменить" */
 
 .okved-selected .okved-clear {
   flex: 0 0 auto;

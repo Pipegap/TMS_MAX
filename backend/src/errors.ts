@@ -10,8 +10,6 @@ export class AppError extends Error {
     super(message);
   }
 }
-
-/** Единый формат ошибок: { error: { code, message, fields? } } — фронт всегда знает, что показать. */
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ZodError) {
     const fields: Record<string, string> = {};

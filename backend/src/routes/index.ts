@@ -10,7 +10,6 @@ import { industryFromOkved } from '../domain/okved.js';
 
 export const api = Router();
 
-// --- служебное (без авторизации) ---
 api.get('/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -20,7 +19,7 @@ api.get('/health', async (_req, res) => {
   }
 });
 
-// Справочники для анкеты: фронт берёт варианты ответов отсюда, а не хардкодит.
+
 api.get('/dictionaries', (_req, res) => {
   res.json(dictionaries);
 });
@@ -67,7 +66,7 @@ api.get('/okved', async (req, res) => {
   res.json({ items: rows });
 });
 
-// --- профиль ---
+
 api.get('/profile', requireAuth, async (_req, res) => {
   const { userId } = getAuth(res);
 
@@ -91,7 +90,7 @@ api.get('/profile', requireAuth, async (_req, res) => {
   res.json({ profile: rows[0] ?? null });
 });
 
-// --- подбор: сохраняет профиль, считает совпадения, пишет историю ---
+
 const summarize = (m: Measure) => ({
   id: m.id,
   title: m.title,
@@ -108,20 +107,12 @@ const summarize = (m: Measure) => ({
 api.post('/match', requireAuth, async (req, res) => {
   const { userId } = getAuth(res);
 
-  /*
-   * Получаем данные анкеты.
-   *
-   * industry здесь может отсутствовать —
-   * отрасль определяем ниже автоматически
-   * по выбранному ОКВЭД.
-   */
+  
   const input = profileSchema.parse(req.body);
 
   console.log('[match] input:', JSON.stringify(input, null, 2));
 
-  /*
-   * Определяем отрасль по ОКВЭД.
-   */
+  
   const profile = {
     ...input,
     industry: industryFromOkved(input.okvedCode),
@@ -129,9 +120,7 @@ api.post('/match', requireAuth, async (req, res) => {
 
   console.log('[match] profile:', JSON.stringify(profile, null, 2));
 
-  /*
-   * Сохраняем профиль пользователя.
-   */
+  
   await pool.query(
     `
       INSERT INTO business_profiles (
@@ -184,10 +173,7 @@ api.post('/match', requireAuth, async (req, res) => {
     ],
   );
 
-  /*
-   * Загружаем активные меры поддержки
-   * и запускаем существующий алгоритм подбора.
-   */
+  
   const measures = await listActiveMeasures();
 
   const items = matchMeasures(
@@ -195,9 +181,7 @@ api.post('/match', requireAuth, async (req, res) => {
     measures,
   );
 
-  /*
-   * Сохраняем результат подбора.
-   */
+  
   await pool.query(
     `
       INSERT INTO match_runs (
@@ -220,9 +204,7 @@ api.post('/match', requireAuth, async (req, res) => {
     ],
   );
 
-  /*
-   * Возвращаем результат фронтенду.
-   */
+  
   res.json({
     profile,
 
@@ -236,11 +218,8 @@ api.post('/match', requireAuth, async (req, res) => {
   });
 });
 
-// ======================================================
-// ИЗБРАННОЕ
-// ======================================================
 
-// Получить все избранные меры текущего пользователя.
+
 api.get('/favorites', requireAuth, async (_req, res) => {
   const { userId } = getAuth(res);
 
@@ -272,7 +251,7 @@ api.get('/favorites', requireAuth, async (_req, res) => {
   });
 });
 
-// Добавить меру в избранное.
+
 api.post('/favorites/:measureId', requireAuth, async (req, res) => {
   const { userId } = getAuth(res);
 
@@ -315,7 +294,7 @@ api.post('/favorites/:measureId', requireAuth, async (req, res) => {
   });
 });
 
-// Удалить меру из избранного.
+
 api.delete('/favorites/:measureId', requireAuth, async (req, res) => {
   const { userId } = getAuth(res);
 
@@ -344,7 +323,7 @@ api.delete('/favorites/:measureId', requireAuth, async (req, res) => {
   });
 });
 
-// --- карточка меры ---
+
 api.get('/measures/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
 
