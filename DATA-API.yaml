@@ -1,0 +1,80 @@
+# DATA-API 1.0
+
+
+schemaVersion: "1.0"
+
+solution:
+  name: "MAX — Меры поддержки для бизнеса"
+  teamId: "TMS_MAX"
+
+api:
+  baseUrl: "https://tms-max.relaxdev.ru"
+  openapi: "./openapi.yaml"
+
+  defaultHeaders:
+    Accept: "application/json"
+
+checks:
+
+  - id: "health"
+    name: "Проверка доступности API"
+    description: "Проверка работоспособности API и подключения к базе данных"
+    method: "GET"
+    path: "/api/health"
+    role: "public"
+
+    expected:
+      statusCodes:
+        - 200
+      contentType: "application/json"
+      requiredFields:
+        - "status"
+        - "db"
+
+    timeoutMs: 5000
+    repeatable: true
+
+
+  - id: "dictionaries"
+    name: "Получение справочников анкеты"
+    description: "Проверка получения справочников, необходимых для заполнения анкеты предпринимателя"
+    method: "GET"
+    path: "/api/dictionaries"
+    role: "public"
+
+    expected:
+      statusCodes:
+        - 200
+      contentType: "application/json"
+      requiredFields:
+        - "regions"
+        - "businessForms"
+        - "stages"
+        - "industries"
+        - "employees"
+        - "needs"
+
+    timeoutMs: 5000
+    repeatable: true
+
+
+  - id: "okved-search"
+    name: "Поиск кодов ОКВЭД"
+    description: "Проверка поиска вида экономической деятельности по коду или названию"
+    method: "GET"
+    path: "/api/okved"
+    role: "public"
+
+    request:
+      query:
+        query: "47.11"
+
+    expected:
+      statusCodes:
+        - 200
+      contentType: "application/json"
+      requiredFields:
+        - "items"
+
+    timeoutMs: 5000
+    repeatable: true

@@ -1,0 +1,589 @@
+openapi: 3.1.0
+
+info:
+  title: MAX — Меры поддержки для бизнеса API
+  description: |
+    REST API сервиса подбора мер государственной и региональной
+    поддержки для предпринимателей.
+
+    API используется мини-приложением MAX для:
+    - получения справочников анкеты;
+    - поиска кодов ОКВЭД;
+    - сохранения профиля предпринимателя;
+    - подбора подходящих мер поддержки;
+    - просмотра подробной информации о мере;
+    - работы с избранными мерами.
+
+    Данные о мерах поддержки в текущем MVP являются
+    демонстрационными и подготовленными для проверки сценария.
+  version: 1.0.0
+  contact:
+    name: TMS_MAX
+
+servers:
+  - url: https://tms-max.relaxdev.ru
+    description: Production API
+
+tags:
+  - name: System
+    description: Служебные методы
+  - name: Dictionaries
+    description: Справочники для анкеты
+  - name: OKVED
+    description: Поиск видов экономической деятельности
+  - name: Profile
+    description: Профиль пользователя
+  - name: Matching
+    description: Подбор мер поддержки
+  - name: Measures
+    description: Информация о мерах поддержки
+  - name: Favorites
+    description: Избранные меры поддержки
+
+paths:
+
+  /api/health:
+    get:
+      tags:
+        - System
+      summary: Проверка доступности API
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: API доступно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                db: up
+
+  /api/dictionaries:
+    get:
+      tags:
+        - Dictionaries
+      summary: Получить справочники анкеты
+      operationId: getDictionaries
+      security: []
+      responses:
+        '200':
+          description: Справочники успешно получены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionariesResponse'
+              example:
+                regions:
+                  - id: moscow
+                    label: Москва
+                businessForms:
+                  - id: ooo
+                    label: ООО
+                stages:
+                  - id: operating
+                    label: Действующий бизнес
+                industries:
+                  - id: it
+                    label: Информационные технологии
+                employees:
+                  - id: 1_15
+                    label: От 1 до 15 сотрудников
+                needs:
+                  - id: equipment
+                    label: Приобретение оборудования
+
+  /api/okved:
+    get:
+      tags:
+        - OKVED
+      summary: Поиск кода ОКВЭД
+      operationId: searchOkved
+      security: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Код или название вида экономической деятельности
+          schema:
+            type: string
+            minLength: 1
+          example: 47.11
+      responses:
+        '200':
+          description: Результаты поиска
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkvedSearchResponse'
+              example:
+                items:
+                  - code: "47.11"
+                    name: Торговля розничная в неспециализированных магазинах
+        '400':
+          description: Некорректный запрос
+
+  /api/profile:
+    get:
+      tags:
+        - Profile
+      summary: Получить профиль пользователя
+      operationId: getProfile
+      security:
+        - maxWebApp: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Profile
+      summary: Сохранить профиль пользователя
+      operationId: saveProfile
+      security:
+        - maxWebApp: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Profile'
+            example:
+              regionId: moscow
+              businessForm: ooo
+              stage: operating
+              okvedCode: "20.1"
+              okvedName: Производство химических веществ
+              industry: manufacturing
+              employees: 1_15
+              needs:
+                - equipment
+      responses:
+        '200':
+          description: Профиль сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          description: Некорректный профиль
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/match:
+    post:
+      tags:
+        - Matching
+      summary: Подобрать меры поддержки
+      description: |
+        Выполняет подбор мер поддержки на основании параметров
+        бизнеса пользователя.
+
+        Алгоритм учитывает:
+        - регион;
+        - организационно-правовую форму;
+        - стадию бизнеса;
+        - основной ОКВЭД;
+        - количество сотрудников;
+        - необходимые виды поддержки.
+
+        В ответ возвращается список найденных мер с оценкой
+        соответствия и причинами попадания в результаты.
+      operationId: matchMeasures
+      security:
+        - maxWebApp: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Profile'
+            example:
+              regionId: moscow
+              businessForm: ooo
+              stage: operating
+              okvedCode: "20.1"
+              okvedName: Производство химических веществ
+              industry: manufacturing
+              employees: 1_15
+              needs:
+                - equipment
+      responses:
+        '200':
+          description: Результат подбора
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchResponse'
+        '400':
+          description: Некорректные параметры анкеты
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/measures/{id}:
+    get:
+      tags:
+        - Measures
+      summary: Получить подробную информацию о мере поддержки
+      operationId: getMeasure
+      security:
+        - maxWebApp: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор меры поддержки
+          schema:
+            type: integer
+          example: 48
+      responses:
+        '200':
+          description: Информация о мере поддержки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Measure'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/favorites:
+    get:
+      tags:
+        - Favorites
+      summary: Получить избранные меры
+      operationId: getFavorites
+      security:
+        - maxWebApp: []
+      responses:
+        '200':
+          description: Список избранных мер
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/favorites/{measureId}:
+    post:
+      tags:
+        - Favorites
+      summary: Добавить меру в избранное
+      operationId: addFavorite
+      security:
+        - maxWebApp: []
+      parameters:
+        - name: measureId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 48
+      responses:
+        '200':
+          description: Мера добавлена в избранное
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Favorites
+      summary: Удалить меру из избранного
+      operationId: removeFavorite
+      security:
+        - maxWebApp: []
+      parameters:
+        - name: measureId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 48
+      responses:
+        '200':
+          description: Мера удалена из избранного
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+
+  securitySchemes:
+
+    maxWebApp:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Авторизация через initData мини-приложения MAX.
+        Формат:
+        Authorization: MaxWebApp <initData>
+
+  responses:
+
+    Unauthorized:
+      description: Пользователь не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Unauthorized
+
+    NotFound:
+      description: Объект не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Not found
+
+  schemas:
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - db
+      properties:
+        status:
+          type: string
+          example: ok
+        db:
+          type: string
+          example: up
+
+    DictionaryItem:
+      type: object
+      required:
+        - id
+        - label
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+
+    DictionariesResponse:
+      type: object
+      required:
+        - regions
+        - businessForms
+        - stages
+        - industries
+        - employees
+        - needs
+      properties:
+        regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+        businessForms:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+        industries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+        needs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryItem'
+
+    OkvedItem:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    OkvedSearchResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OkvedItem'
+
+    Profile:
+      type: object
+      required:
+        - regionId
+        - businessForm
+        - stage
+        - okvedCode
+        - employees
+        - needs
+      properties:
+        regionId:
+          type: string
+          description: Идентификатор региона
+        businessForm:
+          type: string
+          description: Организационно-правовая форма
+        stage:
+          type: string
+          description: Стадия бизнеса
+        okvedCode:
+          type: string
+          description: Основной код ОКВЭД
+        okvedName:
+          type: string
+          description: Наименование ОКВЭД
+        industry:
+          type: string
+          nullable: true
+          description: Отрасль бизнеса
+        employees:
+          type: string
+          description: Диапазон количества сотрудников
+        needs:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: Необходимые виды поддержки
+
+    ProfileResponse:
+      type: object
+      required:
+        - profile
+      properties:
+        profile:
+          allOf:
+            - $ref: '#/components/schemas/Profile'
+
+    Measure:
+      type: object
+      required:
+        - id
+        - title
+        - type
+        - provider
+        - level
+        - summary
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        type:
+          type: string
+        provider:
+          type: string
+        level:
+          type: string
+          enum:
+            - federal
+            - regional
+        summary:
+          type: string
+        amountText:
+          type:
+            - string
+            - 'null'
+        deadlineAt:
+          type:
+            - string
+            - 'null'
+          format: date
+        isRolling:
+          type: boolean
+        isDemo:
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: string
+        documents:
+          type: array
+          items:
+            type: string
+        applyUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        sourceUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        score:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+
+    MatchResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Measure'
+
+    FavoritesResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Measure'
+
+    FavoriteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        measureId:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
