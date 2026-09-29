@@ -83,13 +83,7 @@ type Question = {
 
 const DEV_USER_ID = '123456789'
 
-/*
- * В production используем backend RelaxDev.
- * В development — локальный backend.
- *
- * Если VITE_API_BASE_URL задан без /api,
- * автоматически добавляем /api.
- */
+
 const configuredApiUrl = import.meta.env.VITE_API_BASE_URL
   ?.trim()
   .replace(/\/+$/, '')

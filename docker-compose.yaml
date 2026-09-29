@@ -24,8 +24,7 @@ services:
       timeout: 3s
       retries: 10
 
-    # PostgreSQL нужен с хоста только для разработки / DBeaver.
-    # На сервере этот ports можно будет убрать.
+    
     ports:
       - "127.0.0.1:5433:5432"
 
@@ -57,8 +56,7 @@ services:
       postgres_db:
         condition: service_healthy
 
-    # Оставляем API доступным только с этой машины.
-    # Снаружи пользователи попадут к нему через Caddy.
+    
     ports:
       - "127.0.0.1:8000:8000"
 

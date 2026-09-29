@@ -14,24 +14,7 @@
 
 ## Архитектура
 
-```
- Пользователь в MAX
-        │
-        ├── чат с ботом ──────────►  Bot (@maxhub/max-bot-api, long polling)
-        │                                   │
-        └── мини-приложение ─► Caddy (web) ─┤  /      → статика фронтенда
-                                            │  /api/* → reverse proxy
-                                            ▼
-                                  Backend API (Node 22, Express, TypeScript)
-                                   ├─ auth        проверка initData MAX
-                                   ├─ routes      REST API
-                                   ├─ domain      логика подбора мер
-                                   ├─ middleware  авторизация, валидация (zod)
-                                   └─ db          доступ к PostgreSQL
-                                            │
-                                            ▼
-                                  PostgreSQL 15 (миграции + seed из backend/data)
-```
+![Архитектура проекта](docs/architecture.png)
 
 | Компонент | Технологии                               |
 | --------- | ---------------------------------------- |
@@ -50,7 +33,7 @@ git clone <URL репозитория>
 cd <папка проекта>
 
 cp .env.example .env
-# заполните MAX_BOT_TOKEN (получить у @MasterBot в MAX)
+# заполнить MAX_BOT_TOKEN
 
 docker compose up -d --build
 ```
@@ -82,7 +65,7 @@ docker compose up -d --build
 | `INIT_DATA_MAX_AGE_SECONDS`         | максимальный возраст `initData`                                                          | 86400                          |
 | `DEV_AUTH_BYPASS`                   | отключает проверку подписи для локальной отладки. **В продакшене всегда `false`**        | false                          |
 
-## Как проверить (сценарий для жюри)
+## Как проверить
 
 1. Убедиться, что сервис жив:
    ```bash
@@ -112,17 +95,17 @@ docker compose up -d --build
 ```
 backend/
   src/
-    auth/         проверка initData MAX
-    bot/          логика бота
-    db/           подключение и запросы к БД
-    domain/       подбор мер поддержки
-    middleware/   авторизация, обработка ошибок
-    routes/       REST-эндпоинты
-  data/           справочники и каталог мер
-  migrations/     SQL-миграции
+    auth/
+    bot/
+    db/
+    domain/
+    middleware/
+    routes/
+  data/
+  migrations/
   Dockerfile
 frontend/
-  src/            мини-приложение
+  src/
   public/
   Caddyfile
   Dockerfile

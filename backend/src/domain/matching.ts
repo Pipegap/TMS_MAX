@@ -60,22 +60,14 @@ export interface MatchItem {
 }
 
 export interface MatchOptions {
-  /**
-   * YYYY-MM-DD.
-   * По умолчанию используется сегодняшняя дата UTC.
-   */
   today?: string
 
-  /**
-   * Максимальное количество результатов.
-   */
+
+   
   limit?: number
 }
 
-/**
- * Пустой список ограничений означает:
- * мера подходит всем.
- */
+
 const allows = (
   restriction: string[],
   value: string,
@@ -86,27 +78,6 @@ const allows = (
   )
 }
 
-/**
- * Подбор мер поддержки.
- *
- * Этап 1:
- * жёсткая фильтрация по:
- * - региону;
- * - форме бизнеса;
- * - стадии;
- * - отрасли;
- * - численности;
- * - сроку действия;
- * - целям пользователя.
- *
- * Этап 2:
- * рассчитывается score.
- *
- * ОКВЭД используется для определения industry,
- * но сам код ОКВЭД не используется как жёсткий фильтр,
- * пока в мерах поддержки нет отдельных ограничений
- * по конкретным кодам ОКВЭД.
- */
 export function matchMeasures(
   profile: Profile,
   measures: Measure[],
@@ -121,9 +92,7 @@ export function matchMeasures(
   const result: MatchItem[] = []
 
   for (const measure of measures) {
-    /*
-     * 1. Проверяем срок действия.
-     */
+  
     if (
       measure.deadlineAt &&
       measure.deadlineAt < today
@@ -131,9 +100,7 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 2. Регион.
-     */
+  
     if (
       !allows(
         measure.regions,
@@ -143,9 +110,7 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 3. Форма бизнеса.
-     */
+  
     if (
       !allows(
         measure.forms,
@@ -155,9 +120,7 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 4. Стадия бизнеса.
-     */
+
     if (
       !allows(
         measure.stages,
@@ -167,11 +130,7 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 5. Отрасль.
-     *
-     * Она определяется автоматически из ОКВЭД.
-     */
+  
     if (
       !allows(
         measure.industries,
@@ -181,9 +140,7 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 6. Количество сотрудников.
-     */
+  
     if (
       !allows(
         measure.employees,
@@ -193,22 +150,13 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * 7. Совпадение целей.
-     */
+   
     const needOverlap = measure.needs.filter(
       (need) =>
         profile.needs.includes(need),
     )
 
-    /*
-     * Если у меры есть конкретные цели,
-     * но ни одна из них не совпала с целями пользователя,
-     * такая мера исключается.
-     *
-     * Если needs у меры пустой —
-     * она считается подходящей по цели всем.
-     */
+   
     if (
       profile.needs.length > 0 &&
       measure.needs.length > 0 &&
@@ -217,17 +165,10 @@ export function matchMeasures(
       continue
     }
 
-    /*
-     * ================================
-     * SCORE
-     * ================================
-     */
-
+   
     const reasons: string[] = []
 
-    /*
-     * Совпадение целей имеет наибольший вес.
-     */
+    
     let score = needOverlap.length * 3
 
     if (needOverlap.length > 0) {
@@ -306,15 +247,7 @@ export function matchMeasures(
     })
   }
 
-  /*
-   * Сначала самые релевантные по score.
-   *
-   * При одинаковом score:
-   * сначала меры с ближайшим дедлайном.
-   *
-   * Если дедлайн одинаковый —
-   * сортируем по названию.
-   */
+  
   result.sort((a, b) => {
     if (b.score !== a.score) {
       return b.score - a.score
