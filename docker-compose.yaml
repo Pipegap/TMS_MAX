@@ -38,7 +38,7 @@ services:
 
     environment:
       NODE_ENV: production
-      PORT: 8000
+      PORT: 8000:8000
 
       DB_HOST: postgres_db
       DB_PORT: 5432
