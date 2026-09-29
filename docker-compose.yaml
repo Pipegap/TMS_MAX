@@ -38,7 +38,7 @@ services:
 
     environment:
       NODE_ENV: production
-      PORT: 8000:8000
+      PORT: 8000
 
       DB_HOST: postgres_db
       DB_PORT: 5432
@@ -48,7 +48,7 @@ services:
 
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
       MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:-}
-      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-false}
+      DEV_AUTH_BYPASS: ${DEV_AUTH_BYPASS:-true}
 
       INIT_DATA_MAX_AGE_SECONDS: ${INIT_DATA_MAX_AGE_SECONDS:-86400}
 
