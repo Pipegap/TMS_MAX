@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
+
 RUN npm run build
 
 
@@ -16,7 +17,9 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS=--use-system-ca
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        openssl \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,12 +33,15 @@ RUN openssl x509 -inform DER \
       -in /tmp/russian-trusted-sub-ca.cer \
       -out /usr/local/share/ca-certificates/russian-trusted-sub-ca.crt \
     && update-ca-certificates \
-    && rm /tmp/russian-trusted-root-ca.cer /tmp/russian-trusted-sub-ca.cer
+    && rm \
+      /tmp/russian-trusted-root-ca.cer \
+      /tmp/russian-trusted-sub-ca.cer
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev \
+    && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
@@ -43,8 +49,14 @@ COPY data ./data
 
 USER node
 
-EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+EXPOSE 8080
+
+HEALTHCHECK \
+    --interval=30s \
+    --timeout=5s \
+    --start-period=20s \
+    --retries=5 \
+    CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+
 CMD ["node", "dist/index.js"]
